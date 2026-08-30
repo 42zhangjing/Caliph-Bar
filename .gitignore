@@ -1,0 +1,6 @@
+.build/
+.DS_Store
+*.xcuserstate
+DerivedData/
+CaliphBar.app/
+*.dSYM/

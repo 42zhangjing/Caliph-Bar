@@ -1,0 +1,23 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test parsers and core
+        run: swift test
+      - name: Build universal app
+        run: ./build-app.sh
+      - name: Verify bundle
+        run: |
+          test -x CaliphBar.app/Contents/MacOS/CaliphBar
+          lipo -info CaliphBar.app/Contents/MacOS/CaliphBar
+          codesign --verify --deep --strict CaliphBar.app
