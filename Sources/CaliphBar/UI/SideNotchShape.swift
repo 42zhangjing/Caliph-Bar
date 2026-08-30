@@ -11,6 +11,10 @@ enum SideNotchLayout {
     static let itemSize = CGSize(width: 56, height: 66)
     static let itemSpacing: CGFloat = 13
 
+    /// Extends the panel slightly beyond the physical display edge so the
+    /// closing edge of the shape is never visible as a separate black bar.
+    static let edgeBleed: CGFloat = 6
+
     static func providerCenterYFromTop(
         index: Int,
         providerCount: Int,
@@ -25,63 +29,72 @@ enum SideNotchLayout {
     }
 }
 
-/// A single, continuous organic edge-docked silhouette shape.
+/// One continuous edge-docked silhouette.
 ///
-/// Features:
-/// - Screen-docked side departs seamlessly from the display boundary.
-/// - Top & bottom transitions are smooth S-curves with concave fillets at the screen edge
-///   and convex shoulders wrapping the body, with tangent continuity (G1/G2).
-/// - Middle body is a long vertical straight line occupying ~64% of total height.
-/// - Symmetrical horizontal mirroring between `.left` and `.right` dock sides.
+/// The free-facing edge uses two cubic Bezier segments at the top and two
+/// mirrored segments at the bottom. The middle ~59% is intentionally straight,
+/// which prevents the shape from reading as a capsule. The screen-facing edge
+/// is pushed outside the display by `SideNotchLayout.edgeBleed`.
 struct EdgePillShape: Shape {
     let side: EdgeSide
-    var transitionRatio: CGFloat = 0.178
-    var controlWeight1: CGFloat = 0.68
-    var controlWeight2: CGFloat = 0.68
 
     func path(in rect: CGRect) -> Path {
-        let transitionHeight = rect.height * transitionRatio
-        let topStraightY = rect.minY + transitionHeight
-        let bottomStraightY = rect.maxY - transitionHeight
+        guard rect.width > 0, rect.height > 0 else { return Path() }
+
+        let rightDocked = rightDockedPath(in: rect)
+        guard side == .left else { return rightDocked }
+
+        let mirror = CGAffineTransform(
+            a: -1,
+            b: 0,
+            c: 0,
+            d: 1,
+            tx: rect.minX + rect.maxX,
+            ty: 0
+        )
+        return rightDocked.applying(mirror)
+    }
+
+    private func rightDockedPath(in rect: CGRect) -> Path {
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(
+                x: rect.minX + rect.width * x,
+                y: rect.minY + rect.height * y
+            )
+        }
 
         var path = Path()
 
-        // 1. Start at screen edge (top right corner for .right dock)
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-
-        // 2. Top S-curve transition:
-        //    Leaves screen edge (rect.maxX) with vertical tangent downwards,
-        //    curves leftward through concave fillet and inflection point,
-        //    then rounds through convex shoulder to meet rect.minX with vertical tangent.
+        // Top transition: screen edge -> concave fillet -> shoulder -> vertical body.
+        path.move(to: p(1.000, 0.000))
         path.addCurve(
-            to: CGPoint(x: rect.minX, y: topStraightY),
-            control1: CGPoint(x: rect.maxX, y: rect.minY + transitionHeight * controlWeight1),
-            control2: CGPoint(x: rect.minX, y: topStraightY - transitionHeight * (1.0 - controlWeight2))
+            to: p(0.680, 0.108),
+            control1: p(1.000, 0.056),
+            control2: p(0.965, 0.098)
+        )
+        path.addCurve(
+            to: p(0.000, 0.205),
+            control1: p(0.400, 0.124),
+            control2: p(0.000, 0.146)
         )
 
-        // 3. Middle straight body segment
-        path.addLine(to: CGPoint(x: rect.minX, y: bottomStraightY))
+        // Long straight free edge.
+        path.addLine(to: p(0.000, 0.795))
 
-        // 4. Bottom S-curve transition:
-        //    Leaves rect.minX vertically downwards, curves rightward through convex shoulder,
-        //    crosses inflection point into concave fillet, and meets rect.maxX with vertical tangent.
+        // Bottom transition: exact vertical mirror of the top geometry.
         path.addCurve(
-            to: CGPoint(x: rect.maxX, y: rect.maxY),
-            control1: CGPoint(x: rect.minX, y: bottomStraightY + transitionHeight * (1.0 - controlWeight2)),
-            control2: CGPoint(x: rect.maxX, y: rect.maxY - transitionHeight * controlWeight1)
+            to: p(0.680, 0.892),
+            control1: p(0.000, 0.854),
+            control2: p(0.400, 0.876)
+        )
+        path.addCurve(
+            to: p(1.000, 1.000),
+            control1: p(0.965, 0.902),
+            control2: p(1.000, 0.944)
         )
 
-        // 5. Straight vertical edge hugging the display boundary
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        // The closing screen-facing edge is intentionally hidden off-screen.
         path.closeSubpath()
-
-        // Horizontal mirror for .left dock side
-        if side == .left {
-            let transform = CGAffineTransform(translationX: rect.minX + rect.maxX, y: 0)
-                .scaledBy(x: -1, y: 1)
-            return path.applying(transform)
-        }
-
         return path
     }
 }
