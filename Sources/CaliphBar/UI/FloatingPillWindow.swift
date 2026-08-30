@@ -280,7 +280,7 @@ final class FloatingPillWindow: NSObject {
                 self.hoverCollapseWorkItem = nil
                 let mouse = NSEvent.mouseLocation
                 guard !self.hoverHitFrame().contains(mouse) else { return }
-                if self.companionHoverFrame?().contains(mouse) == true { return }
+                if let companion = self.companionHoverFrame?(), companion.contains(mouse) { return }
                 withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
                     self.position.isHovered = false
                 }
