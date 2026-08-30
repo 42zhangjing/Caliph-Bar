@@ -13,7 +13,7 @@ This document records the durable design constraints for the floating edge pill 
 
 ## Hover interaction
 
-- Moving the pointer between Claude, Codex, and Gemini updates the compact detail card only when the active provider row changes.
+- Moving the pointer between Claude, Codex, and Antigravity updates the compact detail card only when the active provider row changes.
 - The compact detail card keeps one fixed outer size across providers; only its content cross-fades and the window position glides to the new provider row.
 - The pointer tip remains vertically aligned with the active provider row.
 - Moving from the pill into its compact detail card must not collapse the pill underneath the pointer.
@@ -40,7 +40,8 @@ This document records the durable design constraints for the floating edge pill 
 - Current product semantics display **remaining quota**, not used quota.
 - Codex data remains real local `rate_limits` data; no estimation.
 - Claude may show live, stale, estimated, or unavailable state according to its provider fallback rules.
-- Gemini remains an explicit unimplemented placeholder until a real provider is added.
+- Antigravity uses real local quota-summary data when available; it is not a simulated Gemini placeholder.
+- Public intelligence such as Codex Radar must remain visually separate from real account quota. A Radar signal may annotate Codex but must not alter the user's local percentage or reset timestamp.
 
 ## Verification gates
 
@@ -55,10 +56,11 @@ CI does **not** prove visual quality or interaction feel. After material UI chan
 
 1. right-side dock
 2. left-side dock
-3. Claude → Codex → Gemini hover sweep
+3. Claude → Codex → Antigravity hover sweep
 4. side card → pill pointer movement without collapse
 5. menu-bar panel → Settings → back
 6. Chinese / English / Follow System
 7. auto-collapse and always-expanded modes
+8. if Radar is enabled: Codex account quota remains unchanged when Radar is stale/offline
 
 A UI change is considered complete only after both CI and this local interaction pass succeed.
