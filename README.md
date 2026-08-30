@@ -5,9 +5,9 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 ## Current scope
 
 - **Claude Code** — exact account usage from Anthropic's OAuth usage endpoint when Claude Code credentials are available. Background Keychain reads are non-interactive. If exact usage is temporarily unavailable, CaliphBar prefers a recent last-known-good live snapshot; only then does it fall back to a clearly labeled cost-weighted estimate from local Claude JSONL logs.
-- **Codex CLI** — reads real `rate_limits.primary/secondary.used_percent` and reset timestamps from the newest `~/.codex/sessions/**/rollout-*.jsonl`. No quota estimation and no private ChatGPT backend call.
+- **Codex CLI** — prefers the official local Codex `app-server` JSON-RPC method `account/rateLimits/read` for current quota. Local rollout JSONL remains a fallback only; expired rollout windows are never labeled `LIVE`. No quota estimation and no direct private ChatGPT backend call.
 - **Antigravity** — reads real quota summary data from the local Antigravity 2.x `language_server` while the desktop app is running. A signed-in, already-running `agy` CLI process is also supported as a local fallback. CaliphBar does not scrape the Antigravity UI and does not call Google's remote OAuth quota endpoints.
-- **Public intelligence (planned)** — community/public signals such as Codex Radar are intentionally a separate layer from real account quota. See `docs/CODEX_RADAR_INTELLIGENCE.md`.
+- **Codex Radar public intelligence** — polls the public structured summary separately from account truth, exposes a compact Radar signal, deduplicates meaningful reset-signal notifications, and can correlate a public event with a large real local Codex quota reset without uploading private quota history.
 
 ## UI and interaction
 
@@ -23,13 +23,16 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 - `LIVE`, `STALE`, `ESTIMATED`, and `OFFLINE` source states
 - Chinese / English / Follow System language options
 - menu-bar percentage follows the current provider selection
+- Codex pill can show a separate Radar signal dot; the dot never changes the real account percentage
 
 ## Other features
 
 - one local notification per quota window after crossing the configured threshold
+- Codex Radar transition notifications for meaningful public reset-signal escalation
 - launch at login via `SMAppService`
-- 60-second background refresh plus manual refresh
-- persisted last-known-good live snapshots
+- 60-second account refresh plus manual refresh
+- 5-minute Codex Radar refresh with an independent cache
+- persisted last-known-good live account snapshots
 - Universal Binary build: Apple Silicon + Intel
 
 ## Requirements
@@ -77,9 +80,23 @@ The estimator labels its result `ESTIMATED`; it is never presented as an exact q
 
 ### Codex
 
-CaliphBar looks under `$CODEX_HOME/sessions` or `~/.codex/sessions`, finds the most recently modified `rollout-*.jsonl`, and reads the latest `payload.rate_limits` event. It reads a small file tail first and falls back to streaming the file if needed, avoiding a full in-memory copy of large rollouts.
+CaliphBar now prefers a fresh local query through the official Codex CLI process:
 
-CaliphBar does not use a private ChatGPT usage endpoint for Codex quota monitoring.
+```text
+codex -s read-only -a never app-server
+```
+
+It initializes the local JSON-RPC session and requests:
+
+```text
+account/rateLimits/read
+```
+
+The returned `rateLimits.primary` / `secondary` values are used for the current session and weekly lanes. This is a local subprocess interaction with the Codex CLI; CaliphBar does not read the Codex OAuth token and does not directly call a private ChatGPT HTTP endpoint.
+
+If the app-server query is unavailable, CaliphBar can inspect the newest `$CODEX_HOME/sessions/**/rollout-*.jsonl` or `~/.codex/sessions/**/rollout-*.jsonl` as a local fallback. Rollout data is historical observation data: a lane whose reset timestamp is already in the past is discarded, and any usable rollout fallback is labeled `STALE`, never `LIVE`.
+
+This distinction prevents an old pre-reset percentage from remaining on screen for hours after Codex has already reset.
 
 ### Antigravity
 
@@ -94,6 +111,20 @@ The local server uses a self-signed certificate. CaliphBar relaxes certificate t
 The preferred Antigravity 2.x quota summary contains two real quota families (`Gemini Models` and `Claude and GPT models`) with five-hour and weekly buckets. CaliphBar uses the most constrained known family for each cadence as the compact session/weekly monitor, so the pill errs on the side of warning about the quota that will run out first.
 
 If the desktop app is unavailable, CaliphBar can reuse a signed-in `agy` process that is already running. It intentionally does not launch, own, or kill `agy` in this version. No Google OAuth token is read or stored by CaliphBar.
+
+### Codex Radar
+
+Codex Radar is not an account provider. The current personal build polls the public structured summary:
+
+```text
+https://codexradar.com/current.json
+```
+
+on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Public Radar status/probability may create a `QUIET`, `WATCH`, `HOT`, `STALE`, or `OFFLINE` signal, but it never modifies the user's real Codex percentage or normal reset timestamp.
+
+If CaliphBar observes a large real quota jump across a reset boundary, it can record a small local confirmation event and correlate it with Radar state. Only percentage/reset metadata is retained locally; it is never uploaded to Codex Radar.
+
+The richer `/api/v1/current` API is not used by the current implementation. Any future distributed/public integration should re-check the source's current terms and attribution requirements rather than assuming private/personal use automatically applies to distribution.
 
 ## Product architecture
 
@@ -141,12 +172,12 @@ GitHub is the durable source of truth for CaliphBar. New agents and new chats sh
 - `docs/ARCHITECTURE.md` — product/data-layer architecture
 - `docs/MAINTENANCE.md` — cross-agent maintenance and local-install workflow
 - `docs/RELEASE.md` — build/release checklist
-- `docs/CODEX_RADAR_INTELLIGENCE.md` — planned Codex Radar public-intelligence layer
+- `docs/CODEX_RADAR_INTELLIGENCE.md` — Codex Radar public-intelligence architecture
 - `design-qa.md` — durable UI and interaction regression checklist
 
 ## Privacy
 
-CaliphBar is local-first. It reads local files already written by Claude Code and Codex CLI. For exact Claude usage it sends the existing Claude OAuth token only to Anthropic's own usage endpoint. Antigravity usage is read from Antigravity's loopback-only local service. CaliphBar does not run a server, upload transcripts, or send usage data to CaliphBar infrastructure.
+CaliphBar is local-first. It reads local files already written by Claude Code and Codex CLI. For exact Claude usage it sends the existing Claude OAuth token only to Anthropic's own usage endpoint. Codex live quota is queried through the local Codex CLI app-server. Antigravity usage is read from Antigravity's loopback-only local service. Codex Radar receives only ordinary public-summary GET requests; CaliphBar does not upload private quota data, transcripts, credentials, or usage history to it. CaliphBar does not run a server or send usage data to CaliphBar infrastructure.
 
 Never publish or paste your credential files, Keychain values, OAuth tokens, cookies, CSRF tokens, or API keys into bug reports.
 
