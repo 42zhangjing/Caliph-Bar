@@ -112,7 +112,14 @@ final class FloatingPillWindow: NSObject {
         let savedY = UserDefaults.standard.object(forKey: Keys.originY) as? CGFloat ?? (visible.midY - size.height / 2)
         let clampedY = min(max(savedY, visible.minY + 12), visible.maxY - size.height - 12)
 
-        let targetX: CGFloat = position.side == .right ? (screen.frame.maxX - size.width) : screen.frame.minX
+        let targetX: CGFloat
+        switch position.side {
+        case .right:
+            targetX = screen.frame.maxX - size.width + SideNotchLayout.edgeBleed
+        case .left:
+            targetX = screen.frame.minX - SideNotchLayout.edgeBleed
+        }
+
         let targetRect = NSRect(x: targetX, y: clampedY, width: size.width, height: size.height)
 
         if animated {
@@ -179,9 +186,13 @@ final class FloatingPillWindow: NSObject {
             let chosenSide: EdgeSide = abs(proposedFrame.midX - screen.frame.minX)
                 <= abs(screen.frame.maxX - proposedFrame.midX) ? .left : .right
             position.side = chosenSide
-            proposedFrame.origin.x = chosenSide == .left
-                ? screen.frame.minX
-                : screen.frame.maxX - proposedFrame.width
+
+            switch chosenSide {
+            case .left:
+                proposedFrame.origin.x = screen.frame.minX - SideNotchLayout.edgeBleed
+            case .right:
+                proposedFrame.origin.x = screen.frame.maxX - proposedFrame.width + SideNotchLayout.edgeBleed
+            }
 
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.20
@@ -203,8 +214,8 @@ final class FloatingPillWindow: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-                Task { @MainActor in self?.updateWindowFrame(animated: false) }
-            }
+            Task { @MainActor in self?.updateWindowFrame(animated: false) }
+        }
 
         hoverGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
             Task { @MainActor in self?.updateHoverState(at: NSEvent.mouseLocation) }
