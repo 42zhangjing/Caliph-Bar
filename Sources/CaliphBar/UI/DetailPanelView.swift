@@ -2,25 +2,17 @@ import SwiftUI
 import AppKit
 import CaliphBarCore
 
-struct TrianglePointer: Shape {
-    var isPointingRight: Bool = true
+enum SideDetailPanelLayout {
+    static let cardWidth: CGFloat = 286
+    static let cardHeight: CGFloat = 150
+    static let pointerLength: CGFloat = 34
+    static let shadowPadding: CGFloat = 28
 
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        if isPointingRight {
-            // Triangle pointing right
-            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            p.closeSubpath()
-        } else {
-            // Triangle pointing left
-            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            p.closeSubpath()
-        }
-        return p
+    static var contentSize: CGSize {
+        CGSize(
+            width: cardWidth + pointerLength + shadowPadding * 2,
+            height: cardHeight + shadowPadding * 2
+        )
     }
 }
 
@@ -104,66 +96,94 @@ struct SideDetailPanelView: View {
 
     @ObservedObject private var l10n = L10n.shared
     private let backgroundColor = Color(red: 0.025, green: 0.026, blue: 0.030)
-    private let cardWidth: CGFloat = 286
-    private let pointerLength: CGFloat = 34
 
     var body: some View {
         HStack(spacing: 0) {
-            if side == .left { Color.clear.frame(width: pointerLength) }
-            cardContent
-                .frame(width: cardWidth)
-            if side == .right { Color.clear.frame(width: pointerLength) }
+            if side == .left {
+                Color.clear.frame(width: SideDetailPanelLayout.pointerLength)
+            }
+
+            ZStack(alignment: .topLeading) {
+                if let item = store.item(for: selection.selected) {
+                    providerContent(item)
+                        .id(item.provider)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .offset(y: 3)),
+                                removal: .opacity.combined(with: .offset(y: -2))
+                            )
+                        )
+                }
+            }
+            .frame(
+                width: SideDetailPanelLayout.cardWidth,
+                height: SideDetailPanelLayout.cardHeight,
+                alignment: .topLeading
+            )
+
+            if side == .right {
+                Color.clear.frame(width: SideDetailPanelLayout.pointerLength)
+            }
         }
-        .fixedSize()
+        .frame(
+            width: SideDetailPanelLayout.cardWidth + SideDetailPanelLayout.pointerLength,
+            height: SideDetailPanelLayout.cardHeight
+        )
         .background(
-            IntegratedPointerPanelShape(side: side, pointerLength: pointerLength)
+            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
                 .fill(backgroundColor)
         )
         .overlay(
-            IntegratedPointerPanelShape(side: side, pointerLength: pointerLength)
-                .stroke(Color.white.opacity(0.075), lineWidth: 0.75)
+            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
+                .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
         )
         .compositingGroup()
-        .shadow(color: .black.opacity(0.42), radius: 18, x: side == .right ? -4 : 4, y: 7)
-        .padding(28)
+        .shadow(color: .black.opacity(0.40), radius: 18, x: side == .right ? -4 : 4, y: 7)
+        .padding(SideDetailPanelLayout.shadowPadding)
+        .animation(.easeOut(duration: 0.16), value: selection.selected)
     }
 
-    private var cardContent: some View {
+    private func providerContent(_ item: ProviderSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            if let item = store.item(for: selection.selected) {
-                HStack(spacing: 8) {
-                    BrandMark(provider: item.provider, size: 19)
+            HStack(spacing: 8) {
+                BrandMark(provider: item.provider, size: 19)
 
-                    Text(l10n.providerUsageTitle(item.provider.displayName))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
+                Text(l10n.providerUsageTitle(item.provider.displayName))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
 
-                    if let plan = item.planLabel {
-                        Text(plan)
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.42))
-                    }
-
-                    Spacer(minLength: 10)
-                    sourceIndicator(item.source)
+                if let plan = item.planLabel {
+                    Text(plan)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.42))
                 }
 
-                if item.windows.isEmpty {
-                    Text(localizedNote(for: item))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.white.opacity(0.48))
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(Array(item.windows.prefix(3))) { window in
-                            CompactUsageBar(window: window)
-                        }
+                Spacer(minLength: 10)
+                sourceIndicator(item.source)
+            }
+
+            if item.windows.isEmpty {
+                Text(localizedNote(for: item))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.48))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(Array(item.windows.prefix(3))) { window in
+                        CompactUsageBar(window: window)
                     }
                 }
             }
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
+        .frame(
+            width: SideDetailPanelLayout.cardWidth,
+            height: SideDetailPanelLayout.cardHeight,
+            alignment: .topLeading
+        )
     }
 
     private func sourceIndicator(_ source: UsageSourceKind) -> some View {
@@ -235,7 +255,7 @@ private struct CompactUsageBar: View {
                                 geometry.size.width * CGFloat(min(1, max(0, window.remainingFraction)))
                             )
                         )
-                        .animation(.easeInOut(duration: 0.38), value: window.remainingFraction)
+                        .animation(.easeOut(duration: 0.22), value: window.remainingFraction)
                 }
             }
             .frame(height: 4.5)
@@ -247,95 +267,101 @@ private struct CompactUsageBar: View {
     }
 }
 
+private struct HeaderIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .frame(width: 26, height: 26)
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.12 : 0.001))
+            )
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+    }
+}
+
 struct DetailPanelView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var selection: SelectionModel
-    var side: EdgeSide = .right
 
     @ObservedObject private var l10n = L10n.shared
     @State private var showSettings = false
     @Namespace private var tabNamespace
 
     private let backgroundColor = Color(red: 0.045, green: 0.046, blue: 0.052)
+    private let cardWidth: CGFloat = 342
+    private let contentHeight: CGFloat = 258
 
     var body: some View {
-        HStack(alignment: .center, spacing: 0) {
-            if side == .left {
-                TrianglePointer(isPointingRight: false)
+        cardContent
+            .frame(width: cardWidth)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
                     .fill(backgroundColor)
-                    .frame(width: 14, height: 22)
-            }
-
-            cardContent
-                .frame(width: 342)
-                .background(
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(backgroundColor)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .shadow(color: .black.opacity(0.50), radius: 20, x: side == .right ? -4 : 4, y: 6)
-
-            if side == .right {
-                TrianglePointer(isPointingRight: true)
-                    .fill(backgroundColor)
-                    .frame(width: 14, height: 22)
-            }
-        }
-        .fixedSize()
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(0.075), lineWidth: 0.8)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(0.48), radius: 20, y: 6)
+            .fixedSize()
     }
 
     private var cardContent: some View {
         VStack(spacing: 0) {
             header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
-            if showSettings {
-                SettingsView(store: store)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            } else {
-                providerCard
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 14)
+            ZStack(alignment: .top) {
+                if showSettings {
+                    SettingsView(store: store)
+                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                } else {
+                    providerCard
+                        .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                }
             }
+            .frame(height: contentHeight, alignment: .top)
+            .padding(.horizontal, 14)
 
             footer
-                .padding(.bottom, 11)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
         }
+        .animation(.easeOut(duration: 0.16), value: showSettings)
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Text(l10n.appTitle)
+        HStack(spacing: 4) {
+            Text(showSettings ? l10n.settingsTitle : l10n.appTitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
 
             Spacer()
 
-            Button {
-                store.refresh()
-            } label: {
-                Image(systemName: store.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            if !showSettings {
+                Button {
+                    store.refresh()
+                } label: {
+                    Image(systemName: store.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                }
+                .buttonStyle(HeaderIconButtonStyle())
+                .disabled(store.isRefreshing)
+                .help(l10n.refresh)
             }
-            .buttonStyle(.plain)
-            .disabled(store.isRefreshing)
-            .help(l10n.refresh)
 
             Button {
-                withAnimation(.interpolatingSpring(stiffness: 320, damping: 26)) {
+                withAnimation(.easeOut(duration: 0.16)) {
                     showSettings.toggle()
                 }
             } label: {
                 Image(systemName: showSettings ? "xmark" : "gearshape")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderIconButtonStyle())
             .help(l10n.settingsTitle)
 
             Button {
@@ -343,7 +369,7 @@ struct DetailPanelView: View {
             } label: {
                 Image(systemName: "power")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderIconButtonStyle())
             .help(l10n.quit)
         }
         .foregroundStyle(.white.opacity(0.72))
@@ -353,56 +379,67 @@ struct DetailPanelView: View {
         VStack(alignment: .leading, spacing: 13) {
             providerTabs
 
-            if let item = store.item(for: selection.selected) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        BrandMark(provider: item.provider, size: 24)
-                        Text(item.provider.displayName)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                        if let plan = item.planLabel {
-                            Text(plan)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.55))
-                        }
-                        Spacer()
-                        sourceBadge(item.source)
-                    }
-
-                    if item.windows.isEmpty {
-                        Text(localizedNote(for: item))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.48))
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        ForEach(item.windows) { window in
-                            UsageBar(window: window)
-                        }
-                        if let note = item.note {
-                            Text(note)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.white.opacity(0.36))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
+            ZStack(alignment: .topLeading) {
+                if let item = store.item(for: selection.selected) {
+                    providerContent(item)
+                        .id(item.provider)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .offset(y: 4)),
+                                removal: .opacity.combined(with: .offset(y: -2))
+                            )
+                        )
                 }
-                .id(selection.selected)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .offset(y: 4)),
-                    removal: .opacity
-                ))
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color.black.opacity(0.50)))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.07)))
+        .frame(height: contentHeight, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.black.opacity(0.46)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.065), lineWidth: 0.8))
+        .animation(.easeOut(duration: 0.16), value: selection.selected)
+    }
+
+    private func providerContent(_ item: ProviderSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                BrandMark(provider: item.provider, size: 24)
+                Text(item.provider.displayName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                if let plan = item.planLabel {
+                    Text(plan)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                Spacer()
+                sourceBadge(item.source)
+            }
+
+            if item.windows.isEmpty {
+                Text(localizedNote(for: item))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.48))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(item.windows.prefix(3)) { window in
+                    UsageBar(window: window)
+                }
+                if let note = item.note {
+                    Text(note)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.36))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     private var providerTabs: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             ForEach(ProviderID.allCases, id: \.self) { provider in
                 Button {
-                    withAnimation(.interpolatingSpring(stiffness: 350, damping: 28)) {
+                    withAnimation(.easeOut(duration: 0.15)) {
                         selection.selected = provider
                     }
                 } label: {
@@ -410,9 +447,10 @@ struct DetailPanelView: View {
                         BrandMark(provider: provider, size: 15)
                         Text(provider.displayName)
                             .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
                     }
-                    .foregroundStyle(selection.selected == provider ? .white : .white.opacity(0.38))
-                    .padding(.horizontal, 9)
+                    .foregroundStyle(selection.selected == provider ? .white : .white.opacity(0.40))
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .background {
                         if selection.selected == provider {
@@ -423,8 +461,11 @@ struct DetailPanelView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
             }
         }
+        .padding(3)
+        .background(Capsule().fill(Color.white.opacity(0.035)))
     }
 
     private func sourceBadge(_ source: UsageSourceKind) -> some View {
