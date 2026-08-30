@@ -107,6 +107,9 @@ private struct ProviderPillButton: View {
     let snapshot: ProviderSnapshot?
     let action: () -> Void
 
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
     var body: some View {
         let remaining = snapshot?.headlineRemainingFraction
         Button(action: action) {
@@ -115,15 +118,48 @@ private struct ProviderPillButton: View {
 
                 if let remaining {
                     let percent = Int((remaining * 100).rounded())
-                    Text("\(percent)%")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(StatusColor.color(for: remaining))
-                        .animation(.easeOut(duration: 0.18), value: remaining)
+                    HStack(spacing: 4) {
+                        Text("\(percent)%")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(StatusColor.color(for: remaining))
+                            .animation(.easeOut(duration: 0.18), value: remaining)
+
+                        if provider == .codex {
+                            Circle()
+                                .fill(radarColor)
+                                .frame(width: 5, height: 5)
+                                .help(radarHelp)
+                        }
+                    }
                 }
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
         }
         .buttonStyle(PillItemButtonStyle())
-        .help(provider.displayName)
+        .help(provider == .codex ? "\(provider.displayName) · \(radarHelp)" : provider.displayName)
+    }
+
+    private var radarColor: Color {
+        switch radar.signal {
+        case .hot: return .red
+        case .watch: return .yellow
+        case .quiet: return .green.opacity(0.78)
+        case .stale, .offline: return .white.opacity(0.24)
+        }
+    }
+
+    private var radarHelp: String {
+        let signal: String
+        switch radar.signal {
+        case .quiet: signal = l10n.isChinese ? "Radar 安静" : "Radar QUIET"
+        case .watch: signal = l10n.isChinese ? "Radar 关注" : "Radar WATCH"
+        case .hot: signal = l10n.isChinese ? "Radar 强信号" : "Radar HOT"
+        case .stale: signal = l10n.isChinese ? "Radar 旧情报" : "Radar STALE"
+        case .offline: signal = l10n.isChinese ? "Radar 离线" : "Radar OFFLINE"
+        }
+        if let probability = radar.snapshot?.probability24h {
+            return "\(signal) · 24h \(Int((probability * 100).rounded()))%"
+        }
+        return signal
     }
 }
