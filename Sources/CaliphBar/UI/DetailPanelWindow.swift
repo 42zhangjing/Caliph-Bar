@@ -18,7 +18,7 @@ final class DetailPanelWindow {
     private var isAnimating = false
     private var outsideClickExclusionFrame: NSRect?
     private var dismissWorkItem: DispatchWorkItem?
-    private let shadowPadding: CGFloat = 28
+    private let shadowPadding: CGFloat = 16
     private var currentMode: PanelMode?
 
     init(store: UsageStore, selection: SelectionModel) {
