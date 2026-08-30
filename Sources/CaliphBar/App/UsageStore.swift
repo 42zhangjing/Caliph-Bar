@@ -51,7 +51,7 @@ final class UsageStore: ObservableObject {
         static let weeklyBudget = "caliphbar.claudeWeeklyBudget"
     }
 
-    private let providers: [any UsageProvider] = [ClaudeProvider(), CodexProvider(), GeminiProvider()]
+    private let providers: [any UsageProvider] = [ClaudeProvider(), CodexProvider(), AntigravityProvider()]
     private let cache = SnapshotCache()
     private var liveCache: [ProviderID: ProviderSnapshot]
     private var timer: Timer?
