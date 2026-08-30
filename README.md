@@ -7,6 +7,7 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 - **Claude Code** — exact account usage from Anthropic's OAuth usage endpoint when Claude Code credentials are available. Background Keychain reads are non-interactive. If exact usage is temporarily unavailable, CaliphBar prefers a recent last-known-good live snapshot; only then does it fall back to a clearly labeled cost-weighted estimate from local Claude JSONL logs.
 - **Codex CLI** — reads real `rate_limits.primary/secondary.used_percent` and reset timestamps from the newest `~/.codex/sessions/**/rollout-*.jsonl`. No quota estimation and no private ChatGPT backend call.
 - **Antigravity** — reads real quota summary data from the local Antigravity 2.x `language_server` while the desktop app is running. A signed-in, already-running `agy` CLI process is also supported as a local fallback. CaliphBar does not scrape the Antigravity UI and does not call Google's remote OAuth quota endpoints.
+- **Public intelligence (planned)** — community/public signals such as Codex Radar are intentionally a separate layer from real account quota. See `docs/CODEX_RADAR_INTELLIGENCE.md`.
 
 ## UI and interaction
 
@@ -94,6 +95,20 @@ The preferred Antigravity 2.x quota summary contains two real quota families (`G
 
 If the desktop app is unavailable, CaliphBar can reuse a signed-in `agy` process that is already running. It intentionally does not launch, own, or kill `agy` in this version. No Google OAuth token is read or stored by CaliphBar.
 
+## Product architecture
+
+CaliphBar deliberately separates two kinds of information:
+
+```text
+Layer 1 — Account Truth
+real, user-specific quota and reset state
+
+Layer 2 — Public Intelligence
+community/public reset and model signals
+```
+
+Public intelligence may add context and alerts, but it never modifies account-truth percentages or reset timestamps. See `docs/ARCHITECTURE.md`.
+
 ## Project layout
 
 ```text
@@ -113,9 +128,21 @@ Sources/
 Tests/
   CaliphBarCoreTests/
 Resources/
+docs/
 ```
 
-Adding a provider is intentionally small: implement `UsageProvider`, return the common `ProviderFetchResult`, then add the provider ID and its brand asset. Provider-specific fetching stays out of the shared UI.
+Adding an account provider is intentionally small: implement `UsageProvider`, return the common `ProviderFetchResult`, then add the provider ID and its brand asset. Provider-specific fetching stays out of the shared UI. Public-intelligence sources use a separate model/cache path rather than pretending to be account providers.
+
+## Maintainer / agent documentation
+
+GitHub is the durable source of truth for CaliphBar. New agents and new chats should restore context from the repository rather than relying on conversation memory.
+
+- `AGENTS.md` — mandatory handoff/workflow rules for AI agents and human maintainers
+- `docs/ARCHITECTURE.md` — product/data-layer architecture
+- `docs/MAINTENANCE.md` — cross-agent maintenance and local-install workflow
+- `docs/RELEASE.md` — build/release checklist
+- `docs/CODEX_RADAR_INTELLIGENCE.md` — planned Codex Radar public-intelligence layer
+- `design-qa.md` — durable UI and interaction regression checklist
 
 ## Privacy
 
