@@ -5,6 +5,11 @@ import CaliphBarCore
 
 @MainActor
 final class DetailPanelWindow {
+    private enum PanelMode: Equatable {
+        case menuBar
+        case side(EdgeSide)
+    }
+
     private let panel: NSPanel
     private let store: UsageStore
     private let selection: SelectionModel
@@ -14,13 +19,13 @@ final class DetailPanelWindow {
     private var outsideClickExclusionFrame: NSRect?
     private var dismissWorkItem: DispatchWorkItem?
     private let shadowPadding: CGFloat = 28
-    private var currentSide: EdgeSide?
+    private var currentMode: PanelMode?
 
     init(store: UsageStore, selection: SelectionModel) {
         self.store = store
         self.selection = selection
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 356, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 356, height: 330),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -35,6 +40,7 @@ final class DetailPanelWindow {
 
     var isShown: Bool { panel.isVisible && panel.alphaValue > 0.01 }
     var frame: NSRect { panel.frame }
+    var isMenuBarMode: Bool { currentMode == .menuBar }
 
     func show(relativeTo rect: NSRect, of view: NSView, side: EdgeSide?) {
         guard let window = view.window, let screen = window.screen ?? NSScreen.main else { return }
@@ -51,53 +57,51 @@ final class DetailPanelWindow {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
 
-        let chosenSide = side ?? .right
+        let newMode: PanelMode = side.map(PanelMode.side) ?? .menuBar
         outsideClickExclusionFrame = exclusionFrame
-        currentSide = side
 
-        // Recreate root view only if side or content controller changed
-        if panel.contentViewController == nil || currentSide != side {
+        if panel.contentViewController == nil || currentMode != newMode {
             let rootView: AnyView
-            if side != nil {
+            switch newMode {
+            case .menuBar:
                 rootView = AnyView(
-                    SideDetailPanelView(store: store, selection: selection, side: chosenSide)
+                    DetailPanelView(store: store, selection: selection)
                 )
-            } else {
+            case let .side(edge):
                 rootView = AnyView(
-                    DetailPanelView(store: store, selection: selection, side: chosenSide)
+                    SideDetailPanelView(store: store, selection: selection, side: edge)
                 )
             }
+
             let hosting = NSHostingController(rootView: rootView)
             hosting.sizingOptions = [.preferredContentSize]
             hosting.view.wantsLayer = true
             hosting.view.layer?.backgroundColor = .clear
             panel.contentViewController = hosting
+            currentMode = newMode
         }
 
         guard let hosting = panel.contentViewController else { return }
-        var size = hosting.view.fittingSize
-        if size.width < 1 || size.height < 1 { size = NSSize(width: 356 + shadowPadding * 2, height: 280 + shadowPadding * 2) }
-        panel.setContentSize(size)
-
+        let size = preferredSize(for: newMode, hosting: hosting)
         let targetOrigin = calculateOrigin(for: anchor, size: size, on: screen, side: side)
+        let targetFrame = NSRect(origin: targetOrigin, size: size)
 
         if isShown {
-            // Already visible: smoothly animate position to the new provider row
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.20, 1.0, 0.32, 1.0)
-                panel.animator().setFrameOrigin(targetOrigin)
+                context.duration = 0.17
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.22, 1.0)
+                panel.animator().setFrame(targetFrame, display: true)
+                panel.animator().alphaValue = 1.0
             }
         } else {
-            // Not visible: set position and smoothly fade in
-            panel.setFrameOrigin(targetOrigin)
+            panel.setFrame(targetFrame, display: true)
             panel.alphaValue = 0
             panel.orderFrontRegardless()
 
             isAnimating = true
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.20
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.20, 1.0, 0.32, 1.0)
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.22, 1.0)
                 panel.animator().alphaValue = 1.0
             } completionHandler: { [weak self] in
                 Task { @MainActor in
@@ -107,6 +111,22 @@ final class DetailPanelWindow {
         }
 
         installOutsideClickMonitors()
+    }
+
+    private func preferredSize(for mode: PanelMode, hosting: NSViewController) -> NSSize {
+        switch mode {
+        case .side:
+            return NSSize(
+                width: SideDetailPanelLayout.contentSize.width,
+                height: SideDetailPanelLayout.contentSize.height
+            )
+        case .menuBar:
+            let fitting = hosting.view.fittingSize
+            if fitting.width >= 1, fitting.height >= 1 {
+                return fitting
+            }
+            return NSSize(width: 342, height: 330)
+        }
     }
 
     private func calculateOrigin(
@@ -120,15 +140,11 @@ final class DetailPanelWindow {
 
         switch side {
         case .right:
-            // Pointer tip is at the right edge of the card, distance to view boundary is shadowPadding.
-            // We want pointer tip X to be anchor.minX - pointerGap.
             targetOrigin = NSPoint(
                 x: anchor.minX - size.width - pointerGap + shadowPadding,
                 y: anchor.midY - size.height / 2
             )
         case .left:
-            // Pointer tip is at the left edge of the card, distance to view boundary is shadowPadding.
-            // We want pointer tip X to be anchor.maxX + pointerGap.
             targetOrigin = NSPoint(
                 x: anchor.maxX + pointerGap - shadowPadding,
                 y: anchor.midY - size.height / 2
@@ -136,7 +152,7 @@ final class DetailPanelWindow {
         case nil:
             targetOrigin = NSPoint(
                 x: anchor.midX - size.width / 2,
-                y: anchor.minY - size.height - 8 + shadowPadding
+                y: anchor.minY - size.height - 8
             )
         }
 
@@ -147,15 +163,15 @@ final class DetailPanelWindow {
         return targetOrigin
     }
 
-    func scheduleHoverDismiss(delay: TimeInterval = 0.35) {
-        guard isShown else { return }
+    func scheduleHoverDismiss(delay: TimeInterval = 0.32) {
+        guard isShown, !isMenuBarMode else { return }
         dismissWorkItem?.cancel()
 
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
+                self.dismissWorkItem = nil
                 let mouse = NSEvent.mouseLocation
-                // If mouse is currently inside the panel or exclusion frame, don't dismiss
                 if self.panel.frame.contains(mouse) || self.outsideClickExclusionFrame?.contains(mouse) == true {
                     return
                 }
@@ -179,7 +195,7 @@ final class DetailPanelWindow {
         isAnimating = true
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
+            context.duration = 0.14
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         } completionHandler: { [weak self] in
