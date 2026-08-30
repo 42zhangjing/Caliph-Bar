@@ -3,13 +3,14 @@ import Foundation
 public enum ProviderID: String, CaseIterable, Codable, Sendable {
     case claude
     case codex
+    // Stable v0.1 raw id retained for cache/UserDefaults compatibility; the provider is now Antigravity-backed.
     case gemini
 
     public var displayName: String {
         switch self {
         case .claude: return "Claude"
         case .codex: return "Codex"
-        case .gemini: return "Gemini"
+        case .gemini: return "Antigravity"
         }
     }
 }
