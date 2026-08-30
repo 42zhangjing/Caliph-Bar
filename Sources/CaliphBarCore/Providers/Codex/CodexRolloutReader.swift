@@ -107,7 +107,7 @@ public struct CodexRolloutReader: Sendable {
         guard let end = try? handle.seekToEnd() else { return nil }
         let start = end > UInt64(tailLimit) ? end - UInt64(tailLimit) : 0
         try? handle.seek(toOffset: start)
-        guard let data = try? handle.readToEnd(), let data, !data.isEmpty else { return nil }
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
 
         let lines = data.split(separator: 0x0A, omittingEmptySubsequences: true)
         for line in lines.reversed() {
