@@ -158,5 +158,9 @@ final class UsageStore: ObservableObject {
         isRefreshing = false
         if cacheChanged { cache.save(liveCache) }
         UsageNotifier.check(snapshots: resolved, enabled: notificationsEnabled)
+
+        if let codex = resolved.first(where: { $0.provider == .codex && $0.source == .live }) {
+            CodexRadarStore.shared.observeCodex(codex)
+        }
     }
 }
