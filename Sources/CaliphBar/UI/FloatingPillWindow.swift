@@ -5,28 +5,36 @@ import QuartzCore
 import CaliphBarCore
 
 @MainActor
-final class FloatingPillWindow {
+final class FloatingPillWindow: NSObject {
     private let panel: NSPanel
     private let hosting: NSHostingController<FloatingPillView>
     private let position: PillPositionModel
-    private var moveObserver: NSObjectProtocol?
+    private let store: UsageStore
+    private let selection: SelectionModel
+    private var cancellables: Set<AnyCancellable> = []
+    private var dragStartFrame: NSRect?
     private var screenObserver: NSObjectProtocol?
-    private var snapWorkItem: DispatchWorkItem?
-    private var isProgrammaticMove = false
-    private var selectionCancellable: AnyCancellable?
+    private var hoverGlobalMonitor: Any?
+    private var hoverLocalMonitor: Any?
+    private var hoverCollapseWorkItem: DispatchWorkItem?
 
-    var onProviderTapped: ((ProviderID, NSView, EdgeSide) -> Void)?
+    var onProviderTapped: ((ProviderID, NSRect, NSRect, NSScreen, EdgeSide) -> Void)?
+    var onProviderHovered: ((ProviderID, NSRect, NSRect, NSScreen, EdgeSide) -> Void)?
+    var onPillMouseExited: (() -> Void)?
 
     private enum Keys {
-        static let origin = "caliphbar.pillOrigin"
+        static let originY = "caliphbar.pillOriginY"
         static let side = "caliphbar.pillSide"
     }
 
     init(store: UsageStore, selection: SelectionModel) {
+        self.store = store
+        self.selection = selection
         let storedSide = UserDefaults.standard.string(forKey: Keys.side).flatMap(EdgeSide.init(rawValue:)) ?? .right
         position = PillPositionModel(side: storedSide)
+
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 82, height: 235),
+            contentRect: NSRect(x: 0, y: 0, width: 58, height: 216),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -37,25 +45,44 @@ final class FloatingPillWindow {
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
+        panel.acceptsMouseMovedEvents = true
 
         hosting = NSHostingController(rootView: FloatingPillView(store: store, selection: selection, position: position))
-        hosting.sizingOptions = [.preferredContentSize]
         hosting.view.wantsLayer = true
         hosting.view.layer?.backgroundColor = .clear
         panel.contentViewController = hosting
 
-        selectionCancellable = selection.$selected.dropFirst().sink { [weak self] provider in
-            guard let self, let view = self.panel.contentView else { return }
-            self.onProviderTapped?(provider, view, self.position.side)
+        super.init()
+
+        position.onProviderTapped = { [weak self] provider in
+            self?.handleProviderAction(provider, isTap: true)
         }
+
+        position.onProviderHovered = { [weak self] provider in
+            self?.handleProviderAction(provider, isTap: false)
+        }
+
+        position.onDragMoved = { [weak self] translation in
+            self?.handleDrag(translation: translation, isEnded: false)
+        }
+
+        position.onDragEnded = { [weak self] translation in
+            self?.handleDrag(translation: translation, isEnded: true)
+        }
+
+        store.$pillBehavior
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateWindowFrame(animated: false) }
+            .store(in: &cancellables)
 
         installObservers()
     }
 
     deinit {
-        if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let hoverGlobalMonitor { NSEvent.removeMonitor(hoverGlobalMonitor) }
+        if let hoverLocalMonitor { NSEvent.removeMonitor(hoverLocalMonitor) }
     }
 
     var side: EdgeSide { position.side }
@@ -64,10 +91,7 @@ final class FloatingPillWindow {
     func show() {
         panel.alphaValue = 0
         panel.orderFrontRegardless()
-        var size = hosting.view.fittingSize
-        if size.width < 1 || size.height < 1 { size = NSSize(width: 82, height: 235) }
-        panel.setContentSize(size)
-        restoreOrDefaultPosition()
+        updateWindowFrame(animated: false)
         panel.alphaValue = 1
     }
 
@@ -75,81 +99,182 @@ final class FloatingPillWindow {
         panel.orderOut(nil)
     }
 
-    private func installObservers() {
-        moveObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification,
-            object: panel,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleSnap() }
+    private let windowSize = NSSize(
+        width: SideNotchLayout.windowSize.width,
+        height: SideNotchLayout.windowSize.height
+    )
+
+    private func updateWindowFrame(animated: Bool) {
+        guard let screen = screenContainingPanel() ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let size = windowSize
+
+        let savedY = UserDefaults.standard.object(forKey: Keys.originY) as? CGFloat ?? (visible.midY - size.height / 2)
+        let clampedY = min(max(savedY, visible.minY + 12), visible.maxY - size.height - 12)
+
+        let targetX: CGFloat = position.side == .right ? (screen.frame.maxX - size.width) : screen.frame.minX
+        let targetRect = NSRect(x: targetX, y: clampedY, width: size.width, height: size.height)
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.20
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.20, 1.0, 0.32, 1.0)
+                panel.animator().setFrame(targetRect, display: true)
+            }
+        } else {
+            panel.setFrame(targetRect, display: true)
         }
+
+        UserDefaults.standard.set(clampedY, forKey: Keys.originY)
+        UserDefaults.standard.set(position.side.rawValue, forKey: Keys.side)
+    }
+
+    private func handleProviderAction(_ provider: ProviderID, isTap: Bool) {
+        if selection.selected != provider {
+            selection.selected = provider
+        }
+
+        guard
+            let index = ProviderID.allCases.firstIndex(of: provider),
+            let screen = panel.screen ?? screenContainingPanel() ?? NSScreen.main
+        else { return }
+
+        let centerFromTop = SideNotchLayout.providerCenterYFromTop(
+            index: index,
+            providerCount: ProviderID.allCases.count
+        )
+        let centerY = panel.frame.maxY - centerFromTop
+        let anchor = NSRect(
+            x: panel.frame.minX,
+            y: centerY - SideNotchLayout.itemSize.height / 2,
+            width: panel.frame.width,
+            height: SideNotchLayout.itemSize.height
+        )
+
+        if isTap {
+            onProviderTapped?(provider, anchor, panel.frame, screen, position.side)
+        } else {
+            onProviderHovered?(provider, anchor, panel.frame, screen, position.side)
+        }
+    }
+
+    private func handleDrag(translation: CGSize, isEnded: Bool) {
+        if dragStartFrame == nil { dragStartFrame = panel.frame }
+        guard let startFrame = dragStartFrame else { return }
+
+        var proposedFrame = startFrame
+        proposedFrame.origin.x += translation.width
+        proposedFrame.origin.y -= translation.height
+
+        let candidateCenter = NSPoint(x: proposedFrame.midX, y: proposedFrame.midY)
+        guard let screen = screen(containing: candidateCenter) ?? nearestScreen(to: candidateCenter) else { return }
+
+        let visible = screen.visibleFrame
+        proposedFrame.origin.y = min(
+            max(proposedFrame.origin.y, visible.minY + 12),
+            visible.maxY - proposedFrame.height - 12
+        )
+
+        if isEnded {
+            let chosenSide: EdgeSide = abs(proposedFrame.midX - screen.frame.minX)
+                <= abs(screen.frame.maxX - proposedFrame.midX) ? .left : .right
+            position.side = chosenSide
+            proposedFrame.origin.x = chosenSide == .left
+                ? screen.frame.minX
+                : screen.frame.maxX - proposedFrame.width
+
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.20
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.20, 1.0, 0.32, 1.0)
+                panel.animator().setFrame(proposedFrame, display: true)
+            }
+
+            UserDefaults.standard.set(proposedFrame.origin.y, forKey: Keys.originY)
+            UserDefaults.standard.set(chosenSide.rawValue, forKey: Keys.side)
+            dragStartFrame = nil
+        } else {
+            panel.setFrameOrigin(proposedFrame.origin)
+        }
+    }
+
+    private func installObservers() {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.snapToNearestEdge(animated: false) }
+                Task { @MainActor in self?.updateWindowFrame(animated: false) }
+            }
+
+        hoverGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            Task { @MainActor in self?.updateHoverState(at: NSEvent.mouseLocation) }
+        }
+        hoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            self?.updateHoverState(at: NSEvent.mouseLocation)
+            return event
         }
     }
 
-    private func scheduleSnap() {
-        guard !isProgrammaticMove else { return }
-        snapWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            Task { @MainActor in self?.snapToNearestEdge(animated: true) }
-        }
-        snapWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: work)
-    }
+    private func updateHoverState(at point: NSPoint) {
+        if panel.frame.contains(point) {
+            hoverCollapseWorkItem?.cancel()
+            hoverCollapseWorkItem = nil
+            if store.pillBehavior == .autoCollapse && !position.isHovered {
+                withAnimation(.interpolatingSpring(stiffness: 280, damping: 24)) {
+                    position.isHovered = true
+                }
+            }
 
-    private func restoreOrDefaultPosition() {
-        if let saved = UserDefaults.standard.string(forKey: Keys.origin) {
-            let origin = NSPointFromString(saved)
-            panel.setFrameOrigin(origin)
-            snapToNearestEdge(animated: false)
+            // Precise Provider hit-testing from global/local mouse position
+            let localYFromTop = panel.frame.maxY - point.y
+            let count = ProviderID.allCases.count
+            for (index, provider) in ProviderID.allCases.enumerated() {
+                let centerY = SideNotchLayout.providerCenterYFromTop(index: index, providerCount: count)
+                let halfHeight = (SideNotchLayout.itemSize.height + SideNotchLayout.itemSpacing) / 2
+                if abs(localYFromTop - centerY) <= halfHeight {
+                    handleProviderAction(provider, isTap: false)
+                    break
+                }
+            }
             return
         }
-        guard let screen = NSScreen.main else { return }
-        let frame = screen.visibleFrame
-        let origin = NSPoint(x: frame.maxX - panel.frame.width - 3, y: frame.midY - panel.frame.height / 2)
-        panel.setFrameOrigin(origin)
-        snapToNearestEdge(animated: false)
-    }
 
-    private func snapToNearestEdge(animated: Bool) {
-        guard let screen = screenContainingPanel() ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
-        let centerX = panel.frame.midX
-        let chosen: EdgeSide = abs(centerX - visible.minX) < abs(visible.maxX - centerX) ? .left : .right
-        position.side = chosen
+        // Mouse exited pill window
+        onPillMouseExited?()
 
-        let x = chosen == .left ? visible.minX + 3 : visible.maxX - panel.frame.width - 3
-        let y = min(max(panel.frame.origin.y, visible.minY + 6), visible.maxY - panel.frame.height - 6)
-        let target = NSPoint(x: x, y: y)
-
-        isProgrammaticMove = true
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrameOrigin(target)
-            } completionHandler: { [weak self] in
-                Task { @MainActor in self?.finishProgrammaticMove(target) }
+        guard store.pillBehavior == .autoCollapse, position.isHovered, hoverCollapseWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.hoverCollapseWorkItem = nil
+                guard !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
+                withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
+                    self.position.isHovered = false
+                }
             }
-        } else {
-            panel.setFrameOrigin(target)
-            finishProgrammaticMove(target)
         }
-    }
-
-    private func finishProgrammaticMove(_ origin: NSPoint) {
-        isProgrammaticMove = false
-        UserDefaults.standard.set(NSStringFromPoint(origin), forKey: Keys.origin)
-        UserDefaults.standard.set(position.side.rawValue, forKey: Keys.side)
+        hoverCollapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40, execute: workItem)
     }
 
     private func screenContainingPanel() -> NSScreen? {
         let point = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
-        return NSScreen.screens.first { $0.frame.contains(point) }
+        return screen(containing: point)
+    }
+
+    private func screen(containing point: NSPoint) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(point) }
+    }
+
+    private func nearestScreen(to point: NSPoint) -> NSScreen? {
+        NSScreen.screens.min { lhs, rhs in
+            distanceSquared(from: point, to: lhs.frame) < distanceSquared(from: point, to: rhs.frame)
+        }
+    }
+
+    private func distanceSquared(from point: NSPoint, to rect: NSRect) -> CGFloat {
+        let dx = max(max(rect.minX - point.x, 0), point.x - rect.maxX)
+        let dy = max(max(rect.minY - point.y, 0), point.y - rect.maxY)
+        return dx * dx + dy * dy
     }
 }

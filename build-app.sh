@@ -7,12 +7,19 @@ BUNDLE_ID="dev.chengyu.caliphbar"
 APP="$APP_NAME.app"
 
 echo "Building universal CaliphBar binary (arm64 + x86_64)…"
-swift build -c release --arch arm64 --arch x86_64
+swift build -c release --triple arm64-apple-macosx
+swift build -c release --triple x86_64-apple-macosx
 
-BUILD_OUT=".build/apple/Products/Release"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BUILD_OUT/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
+lipo -create \
+  ".build/arm64-apple-macosx/release/$APP_NAME" \
+  ".build/x86_64-apple-macosx/release/$APP_NAME" \
+  -output "$APP/Contents/MacOS/$APP_NAME"
+
+if [ -d "Resources" ]; then
+  cp -R Resources/* "$APP/Contents/Resources/"
+fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -21,6 +28,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleExecutable</key>
   <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
@@ -28,9 +37,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>$APP_NAME</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>

@@ -2,49 +2,54 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Launch at login", isOn: $store.launchAtLogin)
-            Toggle("Notify once at 90% used", isOn: $store.notificationsEnabled)
-            Toggle("Show floating edge pill", isOn: $store.pillVisible)
+            // General Toggles
+            Toggle(l10n.launchAtLogin, isOn: $store.launchAtLogin)
+            Toggle(l10n.quotaNotifications, isOn: $store.notificationsEnabled)
+            Toggle(l10n.showFloatingPill, isOn: $store.pillVisible)
 
-            Divider().overlay(Color.white.opacity(0.09))
+            if store.pillVisible {
+                HStack {
+                    Text(l10n.notchBehaviorLabel)
+                        .font(.system(size: 12))
+                    Spacer()
+                    Picker("", selection: $store.pillBehavior) {
+                        Text(l10n.notchBehaviorAlways).tag(UsageStore.PillBehavior.alwaysExpanded)
+                        Text(l10n.notchBehaviorAuto).tag(UsageStore.PillBehavior.autoCollapse)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 170)
+                }
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Claude fallback estimate")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("Only used when exact OAuth usage is unavailable and there is no fresh live reading to preserve.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Stepper(value: $store.claudeSessionBudget, in: 5...200, step: 5) {
-                    HStack {
-                        Text("5-hour budget")
-                        Spacer()
-                        Text("$\(Int(store.claudeSessionBudget))")
-                            .foregroundStyle(.white.opacity(0.55))
+            // Language Selector
+            HStack {
+                Text(l10n.languageLabel)
+                    .font(.system(size: 12))
+                Spacer()
+                Picker("", selection: $l10n.currentLanguage) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
                     }
                 }
-                Stepper(value: $store.claudeWeeklyBudget, in: 50...2000, step: 50) {
-                    HStack {
-                        Text("Weekly budget")
-                        Spacer()
-                        Text("$\(Int(store.claudeWeeklyBudget))")
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 170)
             }
 
             Divider().overlay(Color.white.opacity(0.09))
 
+            // Claude Credentials & Keychain
             VStack(alignment: .leading, spacing: 7) {
-                Button("Repair Claude Keychain Access") {
+                Button(l10n.claudeRepairKeychain) {
                     store.repairClaudeKeychainAccess()
                 }
                 .buttonStyle(.bordered)
+
                 if let message = store.credentialRepairMessage {
                     Text(message)
                         .font(.system(size: 10.5))
@@ -62,3 +67,4 @@ struct SettingsView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.07)))
     }
 }
+

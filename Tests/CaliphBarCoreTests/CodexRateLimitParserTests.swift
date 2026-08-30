@@ -1,14 +1,15 @@
-import XCTest
+import Foundation
+import Testing
 @testable import CaliphBarCore
 
-final class CodexRateLimitParserTests: XCTestCase {
-    func testParsesPrimarySecondaryAndPlan() throws {
+@Suite struct CodexRateLimitParserTests {
+    @Test func parsesPrimarySecondaryAndPlan() throws {
         let json = #"{"payload":{"rate_limits":{"primary":{"used_percent":21,"resets_at":1788100000},"secondary":{"used_percent":52.5,"resets_at":1788500000},"plan_type":"plus"}}}"#
         let parsed = CodexRateLimitParser.parse(lineData: Data(json.utf8))
-        XCTAssertEqual(parsed?.primaryPercent, 21)
-        XCTAssertEqual(parsed?.secondaryPercent, 52.5)
-        XCTAssertEqual(parsed?.planType, "plus")
-        XCTAssertNotNil(parsed?.primaryResetsAt)
-        XCTAssertNotNil(parsed?.secondaryResetsAt)
+        #expect(parsed?.primaryPercent == 21)
+        #expect(parsed?.secondaryPercent == 52.5)
+        #expect(parsed?.planType == "plus")
+        #expect(parsed?.primaryResetsAt != nil)
+        #expect(parsed?.secondaryResetsAt != nil)
     }
 }

@@ -24,6 +24,10 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(pillVisible, forKey: Keys.pillVisible) }
     }
 
+    @Published var pillBehavior: PillBehavior {
+        didSet { UserDefaults.standard.set(pillBehavior.rawValue, forKey: Keys.pillBehavior) }
+    }
+
     @Published var claudeSessionBudget: Double {
         didSet { UserDefaults.standard.set(claudeSessionBudget, forKey: Keys.sessionBudget) }
     }
@@ -32,9 +36,17 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(claudeWeeklyBudget, forKey: Keys.weeklyBudget) }
     }
 
+    public enum PillBehavior: String, CaseIterable, Identifiable {
+        case autoCollapse = "autoCollapse"
+        case alwaysExpanded = "alwaysExpanded"
+
+        public var id: String { rawValue }
+    }
+
     private enum Keys {
         static let notifications = "caliphbar.notificationsEnabled"
         static let pillVisible = "caliphbar.pillVisible"
+        static let pillBehavior = "caliphbar.pillBehavior"
         static let sessionBudget = "caliphbar.claudeSessionBudget"
         static let weeklyBudget = "caliphbar.claudeWeeklyBudget"
     }
@@ -48,6 +60,8 @@ final class UsageStore: ObservableObject {
         let defaults = UserDefaults.standard
         notificationsEnabled = defaults.object(forKey: Keys.notifications) as? Bool ?? true
         pillVisible = defaults.object(forKey: Keys.pillVisible) as? Bool ?? true
+        let behaviorRaw = defaults.string(forKey: Keys.pillBehavior) ?? PillBehavior.alwaysExpanded.rawValue
+        pillBehavior = PillBehavior(rawValue: behaviorRaw) ?? .alwaysExpanded
         claudeSessionBudget = defaults.object(forKey: Keys.sessionBudget) as? Double ?? 40
         claudeWeeklyBudget = defaults.object(forKey: Keys.weeklyBudget) as? Double ?? 400
         launchAtLogin = LaunchAtLogin.isEnabled

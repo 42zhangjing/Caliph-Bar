@@ -33,6 +33,10 @@ public struct UsageWindow: Identifiable, Codable, Equatable, Sendable {
         self.usedFraction = usedFraction
         self.resetsAt = resetsAt
     }
+
+    public var remainingFraction: Double {
+        max(0.0, min(1.0, 1.0 - usedFraction))
+    }
 }
 
 public struct ProviderSnapshot: Identifiable, Codable, Equatable, Sendable {
@@ -65,6 +69,10 @@ public struct ProviderSnapshot: Identifiable, Codable, Equatable, Sendable {
 
     public var headlineFraction: Double? {
         windows.first?.usedFraction
+    }
+
+    public var headlineRemainingFraction: Double? {
+        windows.first?.remainingFraction
     }
 
     public static func unavailable(provider: ProviderID, note: String) -> ProviderSnapshot {

@@ -24,11 +24,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         detailPanel = DetailPanelWindow(store: store, selection: selection)
         pillWindow = FloatingPillWindow(store: store, selection: selection)
-        pillWindow.onProviderTapped = { [weak self] _, view, side in
+
+        pillWindow.onProviderTapped = { [weak self] _, anchor, pillFrame, screen, side in
             guard let self else { return }
-            if self.detailPanel.isShown { return }
             self.store.refresh()
-            self.detailPanel.show(relativeTo: view.bounds, of: view, side: side)
+            self.detailPanel.showOrUpdate(
+                anchoredTo: anchor,
+                on: screen,
+                side: side,
+                excluding: pillFrame
+            )
+        }
+
+        pillWindow.onProviderHovered = { [weak self] _, anchor, pillFrame, screen, side in
+            guard let self else { return }
+            self.detailPanel.showOrUpdate(
+                anchoredTo: anchor,
+                on: screen,
+                side: side,
+                excluding: pillFrame
+            )
+        }
+
+        pillWindow.onPillMouseExited = { [weak self] in
+            self?.detailPanel.scheduleHoverDismiss()
         }
 
         if store.pillVisible { pillWindow.show() }
@@ -52,6 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.updateStatusItem() }
             .store(in: &cancellables)
 
+        L10n.shared.$currentLanguage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &cancellables)
+
         updateStatusItem()
     }
 
@@ -60,9 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = store.item(for: selection.selected)
         let title: String
         let color: NSColor
-        if let fraction = item?.headlineFraction {
-            title = " \(min(999, Int(fraction * 100)))%"
-            color = StatusColor.nsColor(for: fraction)
+        if let remaining = item?.headlineRemainingFraction {
+            let percent = Int((remaining * 100).rounded())
+            title = " \(percent)%"
+            color = StatusColor.nsColor(for: remaining)
         } else {
             title = " —"
             color = .secondaryLabelColor
@@ -74,7 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .font: NSFont.menuBarFont(ofSize: 0),
             ]
         )
-        button.toolTip = "CaliphBar · \(selection.selected.displayName)"
+        let l10n = L10n.shared
+        let remainingHint = item?.headlineRemainingFraction.map { " (\(l10n.remainingPercentText(Int(($0 * 100).rounded()))))" } ?? ""
+        button.toolTip = "\(l10n.appTitle) · \(selection.selected.displayName)\(remainingHint)"
     }
 
     @objc private func statusItemClicked() {
