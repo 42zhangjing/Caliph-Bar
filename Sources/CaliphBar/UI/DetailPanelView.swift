@@ -6,7 +6,7 @@ enum SideDetailPanelLayout {
     static let cardWidth: CGFloat = 286
     static let cardHeight: CGFloat = 150
     static let pointerLength: CGFloat = 34
-    static let shadowPadding: CGFloat = 28
+    static let shadowPadding: CGFloat = 16
 
     static var contentSize: CGSize {
         CGSize(
@@ -138,7 +138,7 @@ struct SideDetailPanelView: View {
                 .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
         )
         .compositingGroup()
-        .shadow(color: .black.opacity(0.40), radius: 18, x: side == .right ? -4 : 4, y: 7)
+        .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
         .padding(SideDetailPanelLayout.shadowPadding)
         .animation(.easeOut(duration: 0.16), value: selection.selected)
     }
@@ -305,7 +305,7 @@ struct DetailPanelView: View {
                     .stroke(Color.white.opacity(0.075), lineWidth: 0.8)
             )
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .shadow(color: .black.opacity(0.48), radius: 20, y: 6)
+            .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
             .fixedSize()
     }
 
