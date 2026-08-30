@@ -1,142 +1,129 @@
 # Codex Radar Intelligence Layer
 
-Status: design approved in principle; live integration should respect Codex Radar's current authorization/attribution requirements before being enabled in a distributed build.
+Status: **V1 runtime implemented for the personal CaliphBar build.**
 
-## Why this is a separate layer
+CaliphBar keeps Codex Radar completely separate from account quota truth. The current implementation polls the public structured summary at `https://codexradar.com/current.json` every five minutes, keeps an independent cache, shows a compact Radar signal on the Codex pill, and can send deduplicated notifications when the public signal materially escalates.
 
-CaliphBar already has account truth: real local/account quota, reset time, and state for the current user.
-Codex Radar is different. It is **public/community intelligence** about broader Codex events and model conditions.
+The richer `/api/v1/current` endpoint is **not** used by the current implementation. If CaliphBar is later distributed publicly or commercialized, re-check the source's then-current terms, attribution expectations, and rate guidance rather than assuming personal/private use rules carry over.
 
-Never merge these semantics:
+## Non-negotiable separation
 
 ```text
-Account Truth                       Public Intelligence
-─────────────                       ───────────────────
-My 5-hour remaining                 Global reset signal
-My weekly remaining                 24h / 48h reset probability
-My exact reset timestamp            Official/community event state
-My provider state                   Historical reset pattern
+Layer 1 — Account Truth                 Layer 2 — Public Intelligence
+──────────────────────                  ─────────────────────────────
+My real 5-hour remaining                Global/community reset signal
+My real weekly remaining                24h / 48h reset probability
+My exact account reset timestamp        Public event state
+My provider source state                Historical reset pattern
 ```
 
 A Radar prediction must never alter the user's real Codex percentage or normal reset timestamp.
 
-## Data-source policy
+## V1 data source
 
-The public Codex Radar summary has been observed at:
-
-```text
-https://codexradar.com/current.json
-```
-
-The summary advertises a richer endpoint:
+Current personal build:
 
 ```text
-https://codexradar.com/api/v1/current
+GET https://codexradar.com/current.json
 ```
 
-The public payload includes an `api_access` section stating that the full JSON API and derivative integrations require authorization and that attribution is required. Before enabling a distributable CaliphBar integration, confirm permission/current terms with the Codex Radar operator and preserve the requested attribution.
+Properties of the integration:
 
-Do not scrape the rendered website when a structured authorized/public source is available.
+- five-minute polling, not the 60-second account-provider cadence
+- ephemeral `URLSession`
+- no Codex OAuth token, cookie, credential, transcript, or local quota value is sent
+- parser accepts unknown fields and several camelCase/snake_case variants
+- last-known-good Radar data is cached independently from provider snapshots
+- public-intelligence failure cannot block Claude/Codex/Antigravity account refresh
 
-## V1 UI — deliberately small
+Do not scrape rendered HTML when a usable structured source is available.
 
-The first public-intelligence UI should answer three questions only.
+## RESET SIGNAL
 
-### 1. RESET RADAR
-
-Shows the source's current reset/event state without pretending it is the user's natural quota reset.
-
-Example:
+CaliphBar maps public source evidence into a deliberately small state machine:
 
 ```text
-RESET RADAR
-
-额外重置信号
-● 暂无开启窗口
-
-24 小时概率
-36%
-
-状态更新
-18:39
+QUIET    weak/no actionable signal
+WATCH    meaningful evidence/probability
+HOT      active/high-confidence/open-window signal
+STALE    cached intelligence is too old
+OFFLINE  no usable Radar source/cache
 ```
 
-When the source exposes an explicit official/community event state, prefer that wording over CaliphBar inventing a new interpretation.
+The edge pill shows only a small signal dot next to the **real Codex remaining percentage**. The quota number itself always comes from Layer 1.
 
-### 2. RESET SIGNAL
+Current default interpretation includes:
 
-A compact indicator next to Codex:
+- explicit open window -> `HOT`
+- strong/high/confirmed/active source language -> `HOT`
+- 24h probability >= 65% -> `HOT`
+- watch/medium/likely/pending/possible language -> `WATCH`
+- 24h probability >= 35% -> `WATCH`
+- otherwise -> `QUIET`
 
-```text
-Codex   64%   Radar ●
-```
+These thresholds are CaliphBar presentation policy, not Codex Radar claims. If the source later defines authoritative levels, prefer the source semantics and document the mapping.
 
-Recommended display states:
+## Notifications
 
-- QUIET — no active reset window / weak evidence
-- WATCH — meaningful probability/evidence, but no explicit open window
-- HOT — source reports an active/high-confidence reset event or official signal
-- STALE — source data is older than the accepted freshness threshold
-- OFFLINE — no source and no usable cache
-
-Important: do not blindly map a field named `level` to these labels without documenting its current source semantics. Preserve the original probability and status in the detail view.
-
-### 3. Reset-event notification
-
-Notify on meaningful **state transitions**, not on every polling result.
+Notify on meaningful **state transitions**, not every polling result.
 
 Examples:
 
 ```text
-Codex Reset Radar
-检测到新的额度重置信号
-24 小时概率：68%
+QUIET -> WATCH
+WATCH -> HOT
 ```
 
-or, when the source has an explicit window:
+First launch never replays an already-existing old signal. A small persisted state fingerprint prevents restart spam.
+
+Example notification:
 
 ```text
 Codex Reset Radar
-检测到官方/社区确认的重置窗口
-点击查看来源与更新时间
+检测到高强度额度重置信号
 ```
 
-Do not notify on app startup for an already-known old event.
+or, when an explicit public window is open:
 
-## Stronger idea: Personal Confirmation
+```text
+Codex Reset Radar
+检测到新的额度重置窗口信号
+```
 
-This is more valuable than another prediction gauge.
+## Personal Confirmation
 
-CaliphBar can correlate a public Radar event with the user's **local real Codex quota change** without sending private quota data anywhere.
+CaliphBar can correlate public intelligence with the user's **real local Codex quota change**, entirely on-device.
 
 Example:
 
 ```text
 RESET CONFIRMED LOCALLY
 
-你的周额度
-7% → 100%
-
-Radar
-社区确认重置
-
-时间差
-+3 min
+weekly remaining
+7% -> 100%
 ```
 
-This creates a clear hierarchy:
+Current detector stores only a tiny rolling record:
+
+```text
+session remaining
+weekly remaining
+session reset timestamp
+weekly reset timestamp
+observed time
+```
+
+A local confirmation requires a large upward quota jump plus reset-boundary evidence. Conversation content is never stored for this feature, and the observation is never uploaded to Codex Radar.
+
+This creates a trust hierarchy:
 
 1. Radar says something may be happening globally.
-2. CaliphBar observes the user's real local quota.
-3. If the real quota jumps across a reset boundary, CaliphBar can say **confirmed on this Mac**.
+2. CaliphBar reads the user's real account quota locally.
+3. If the local quota actually jumps across a reset boundary, CaliphBar can call it confirmed on this Mac.
 
-This is a local derived fact and is substantially more trustworthy than presenting community prediction as account truth.
+## Historical pattern
 
-Implementation note: persist a tiny rolling quota-state record (percentage, reset timestamp, observed time), never conversation content. Detect large upward quota discontinuities with reset-timestamp changes and protect against parser/source glitches with consecutive-sample validation.
-
-## Historical pattern — label it correctly
-
-Historical reset-hour distributions can be useful, but they should not be called a forecast unless the source itself provides a forecast.
+Historical distributions are context, not forecasts.
 
 Prefer:
 
@@ -146,106 +133,49 @@ HISTORICAL WINDOW
 21 / 34 historical resets
 ```
 
-instead of:
+Do not rename that to `NEXT RESET` unless the source itself provides a real predicted window. This avoids false precision.
+
+## Optional future UI
+
+A later full-panel treatment may show a restrained detail strip:
 
 ```text
-NEXT RESET
-08:00–09:00
+RESET RADAR     WATCH
+24H             42%
+updated         07:20
+source          Codex Radar
 ```
 
-unless there is an actual source-backed predicted time window.
+The menu-bar/edge pill should remain compact. Detailed IQ, cost, model-health, history, or benchmark views belong behind the full panel or an external source link.
 
-This avoids false precision.
+## Optional Phase 2 — Model Health
 
-## Optional phase 2: Model Health
-
-Codex Radar also exposes model/community intelligence. A later CaliphBar version could add one tiny secondary indicator:
+Codex Radar exposes broader model/community intelligence. CaliphBar may later surface one tiny actionable state such as:
 
 ```text
 MODEL HEALTH
 Sol xhigh   ↓ degraded
 ```
 
-Only surface this when the signal is genuinely actionable. Do not turn the small quota utility into a full benchmark dashboard.
-
-A useful rule: the menu-bar/edge pill is for **quota + urgent intelligence**; detailed IQ/cost/history belongs behind the full panel or an external link.
-
-## Data model
-
-Recommended independent model:
-
-```swift
-struct RadarSnapshot {
-    let schemaVersion: String?
-    let monitoredAt: Date
-    let window: RadarWindow?
-    let prediction: RadarPrediction?
-    let sourceURL: URL?
-    let attribution: String
-    let fetchedAt: Date
-    let freshness: RadarFreshness
-}
-```
-
-Do not reuse `ProviderSnapshot`; Radar is not an account provider.
-
-## Fetch/caching strategy
-
-Recommended default once authorized:
-
-- refresh every 5–10 minutes, not every 60 seconds
-- manual refresh shares the same in-flight request
-- 3–5 second network timeout
-- store last-known-good Radar payload separately
-- use ETag / Last-Modified if the server provides them
-- accept unknown JSON fields for forward compatibility
-- honor `schema_version`; fail safely on incompatible major versions
-- mark cache `STALE` after a defined age (for example 30–60 minutes)
-- account providers continue refreshing even when Radar is offline
-
-The exact polling rate must respect the source operator's authorization/rate guidance.
-
-## Notification state machine
-
-Persist a small event fingerprint so restarts do not replay alerts.
-
-Suggested transition hierarchy:
-
-```text
-quiet → watch → hot → confirmed/closed → quiet
-```
-
-Notification candidates:
-
-- `quiet → hot`
-- explicit official/open-window event appears
-- event materially changes predicted window/status
-- local quota confirms a public reset
-
-Avoid notification spam for probability changes such as 0.36 → 0.38.
+Do not turn CaliphBar into a general benchmark dashboard.
 
 ## Privacy
 
-Radar requests contain no Claude/Codex/Antigravity credentials and no local quota values.
-Personal Confirmation is computed entirely on-device; CaliphBar must not upload the user's quota history to the Radar source.
+Radar requests are public-data reads. They contain no Claude/Codex/Antigravity credentials and no account quota values.
 
-## Attribution
+Personal Confirmation is computed entirely on-device. CaliphBar must never upload private quota history to the Radar source.
 
-When Codex Radar data is displayed, keep visible attribution such as:
+## Attribution and distribution
 
-```text
-数据来自 Codex 雷达 codexradar.com
-```
-
-and provide a source link in the detail panel/full panel.
+For the current personal build, keep the source identity visible in code/UI help and source links. If the project is distributed publicly or commercialized later, re-check Codex Radar's current terms and requested attribution/rate policy before release.
 
 ## Definition of done for V1
 
-- account truth and Radar are visually distinct
-- authorized/public structured source is used according to current terms
-- current event state + probability + freshness are parse-tested
-- polling/cache cannot break the Codex local provider
+- account truth and Radar are semantically separate
+- live Codex quota is not sourced from Radar
+- public structured Radar source is polled independently
 - transition notifications are deduplicated
-- stale/offline states are explicit
-- source attribution is visible
-- local Personal Confirmation is either implemented safely or deferred explicitly
+- stale/offline states fail safely
+- Radar failure cannot break account providers
+- private quota history is never uploaded
+- large local quota resets can be confirmed on-device
