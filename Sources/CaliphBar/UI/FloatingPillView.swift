@@ -118,7 +118,7 @@ private struct ProviderPillButton: View {
                     Text("\(percent)%")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(StatusColor.color(for: remaining))
-                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: 0.18), value: remaining)
                 }
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
