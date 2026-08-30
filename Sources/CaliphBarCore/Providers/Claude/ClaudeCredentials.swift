@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 public struct ClaudeCredentials: Sendable {
     public let accessToken: String
@@ -69,11 +70,18 @@ public struct ClaudeCredentialLoader: Sendable {
         ]
 
         // Background refreshes must never summon a Keychain authorization sheet.
-        // Only an explicit repair action opts into interactive authorization.
+        // LAContext.interactionNotAllowed is the modern macOS replacement for the
+        // deprecated kSecUseAuthenticationUIFail query flag.
+        var authenticationContext: LAContext?
         if !interactive {
-            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            authenticationContext = context
+            query[kSecUseAuthenticationContext as String] = context
         }
 
+        // Keep the context strongly alive for the duration of SecItemCopyMatching.
+        _ = authenticationContext
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
