@@ -6,7 +6,7 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 
 - **Claude Code** — exact account usage from Anthropic's OAuth usage endpoint when Claude Code credentials are available. Background Keychain reads are non-interactive. If exact usage is temporarily unavailable, CaliphBar prefers a recent last-known-good live snapshot; only then does it fall back to a clearly labeled cost-weighted estimate from local Claude JSONL logs.
 - **Codex CLI** — reads real `rate_limits.primary/secondary.used_percent` and reset timestamps from the newest `~/.codex/sessions/**/rollout-*.jsonl`. No quota estimation and no private ChatGPT backend call.
-- **Gemini** — visible placeholder only; intentionally not implemented yet.
+- **Antigravity** — reads real quota summary data from the local Antigravity 2.x `language_server` while the desktop app is running. A signed-in, already-running `agy` CLI process is also supported as a local fallback. CaliphBar does not scrape the Antigravity UI and does not call Google's remote OAuth quota endpoints.
 
 ## UI and interaction
 
@@ -35,7 +35,7 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 
 - macOS 13+
 - Xcode or Xcode Command Line Tools
-- Claude Code and/or Codex CLI installed and used on the Mac
+- Claude Code, Codex CLI, and/or Antigravity installed and signed in on the Mac
 
 ## Build
 
@@ -80,6 +80,20 @@ CaliphBar looks under `$CODEX_HOME/sessions` or `~/.codex/sessions`, finds the m
 
 CaliphBar does not use a private ChatGPT usage endpoint for Codex quota monitoring.
 
+### Antigravity
+
+CaliphBar discovers the Antigravity desktop app's local `language_server` process, reads its CSRF token from the process command line, discovers loopback listening ports with `lsof`, and requests:
+
+```text
+POST https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary
+```
+
+The local server uses a self-signed certificate. CaliphBar relaxes certificate trust **only** for literal `127.0.0.1` / `localhost` requests and never redirects that trust to a remote host.
+
+The preferred Antigravity 2.x quota summary contains two real quota families (`Gemini Models` and `Claude and GPT models`) with five-hour and weekly buckets. CaliphBar uses the most constrained known family for each cadence as the compact session/weekly monitor, so the pill errs on the side of warning about the quota that will run out first.
+
+If the desktop app is unavailable, CaliphBar can reuse a signed-in `agy` process that is already running. It intentionally does not launch, own, or kill `agy` in this version. No Google OAuth token is read or stored by CaliphBar.
+
 ## Project layout
 
 ```text
@@ -91,7 +105,7 @@ Sources/
     Providers/
       Claude/
       Codex/
-      Gemini.swift
+      Antigravity/
   CaliphBar/
     App/
     Services/
@@ -105,9 +119,9 @@ Adding a provider is intentionally small: implement `UsageProvider`, return the 
 
 ## Privacy
 
-CaliphBar is local-first. It reads local files already written by Claude Code and Codex CLI. For exact Claude usage it sends the existing Claude OAuth token only to Anthropic's own usage endpoint. It does not run a server, upload transcripts, or send usage data to CaliphBar infrastructure.
+CaliphBar is local-first. It reads local files already written by Claude Code and Codex CLI. For exact Claude usage it sends the existing Claude OAuth token only to Anthropic's own usage endpoint. Antigravity usage is read from Antigravity's loopback-only local service. CaliphBar does not run a server, upload transcripts, or send usage data to CaliphBar infrastructure.
 
-Never publish or paste your credential files, Keychain values, OAuth tokens, cookies, or API keys into bug reports.
+Never publish or paste your credential files, Keychain values, OAuth tokens, cookies, CSRF tokens, or API keys into bug reports.
 
 ## UI QA
 
