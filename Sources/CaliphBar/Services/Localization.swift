@@ -192,8 +192,11 @@ public final class L10n: ObservableObject {
         isChinese ? "未检测到 Claude 凭据，请在终端运行 claude login 登录" : "Claude credentials not found. Run `claude login`."
     }
 
+    // Legacy property name retained while the third provider slot is migrated from Gemini to Antigravity.
     public var geminiUnimplemented: String {
-        isChinese ? "Gemini 当前未实现，敬请期待" : "Gemini is not implemented yet."
+        isChinese
+            ? "未读取到 Antigravity 本地额度。请先启动并登录 Antigravity，或保持已登录的 agy 正在运行。"
+            : "Antigravity local quota is unavailable. Open and sign in to Antigravity, or keep a signed-in agy session running."
     }
 
     public var refresh: String {
