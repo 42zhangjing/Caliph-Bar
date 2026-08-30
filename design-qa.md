@@ -1,47 +1,64 @@
-# CaliphBar Side Notch 设计验收
+# CaliphBar UI / Interaction QA
 
-## 视觉真值
+This document records the durable design constraints for the floating edge pill and its detail panels. It intentionally avoids machine-specific screenshots, temporary file paths, and claims that cannot be verified in CI.
 
-- 主参考：`/var/folders/19/54vhtbcd5_56kjlrdrp4n8qh0000gn/T/codex-clipboard-7677bfa3-aea1-4494-91c8-2a6e0634b09e.png`（2000 × 2000）
-- 主参考近景：`/var/folders/19/54vhtbcd5_56kjlrdrp4n8qh0000gn/T/codex-clipboard-04c28550-36ac-4965-9e57-56460cad9d5f.png`（261 × 582）
-- 动态参考：`/Users/chengyu/Downloads/1000050786_小萌GIF_20260830_213801.gif`（264 × 240，204 帧）
-- 实现截图：`/tmp/caliphbar-final-desktop-v2.png`（3840 × 2486，macOS 1920 × 1243 @2x）
-- 指针近景：`/tmp/caliphbar-pointer-detail-v2.png`（840 × 480）
-- 同屏比较：`/tmp/caliphbar-design-comparison-v2.png`（参考近景在左，实现状态在右）
+## Floating edge pill
 
-## 验收状态
+- The pill is one continuous custom `Path`, not a capsule plus a connector.
+- The screen-facing closing edge bleeds slightly beyond the physical display edge so no separate vertical seam is visible.
+- The free-facing edge uses a restrained two-stage cubic Bezier transition at the top and bottom, with a long straight middle body.
+- Left/right docking must be exact horizontal mirrors.
+- Provider rows use one shared geometry source (`SideNotchLayout`) for visual layout and pointer anchoring.
+- Collapsed mode must not leave a large invisible hit target over other apps.
 
-- 屏幕：内建主屏，逻辑视口 1920 × 1243。
-- 侧栏：右侧、展开态，物理屏幕边缘 0 间隙。
-- 详情：Codex 选中态，指针中心与 Codex 行中心对齐。
-- 指针：30pt 长针尖；卡片边缘先向内回收 12pt，再以镜像三次贝塞尔过渡到针尖；针尖与侧栏保持 8pt 空隙。
-- 圆环：内底为黑色；未选中 Provider 的官方彩色 Logo 不降亮度。
-- 信息语义：继续使用剩余额度和剩余色阶，没有照搬参考图的 Used 语义。
+## Hover interaction
 
-## 对照发现与修正
+- Moving the pointer between Claude, Codex, and Gemini updates the compact detail card only when the active provider row changes.
+- The compact detail card keeps one fixed outer size across providers; only its content cross-fades and the window position glides to the new provider row.
+- The pointer tip remains vertically aligned with the active provider row.
+- Moving from the pill into its compact detail card must not collapse the pill underneath the pointer.
+- Hover work is rate-limited so duplicate local/global `mouseMoved` events do not cause repeated animations.
 
-1. 初始详情卡跟随整条侧栏中心，而不是点击项：改为按 Provider 行中心计算锚点。
-2. 初始上下轮廓靠近 Claude/Gemini：侧栏增高到 344pt，并增加首尾留白。
-3. 初始 Mini Notch 在透明窗口中居中，视觉上没有贴边：改为按左右侧显式贴齐，窗口继续使用物理屏幕 frame。
-4. 初始指针短且与卡片分离：详情卡与指针改为同一个 Path。
-5. 第一版一体指针根部向外鼓：移除外伸肩部，改成向卡片内部回收的双凹 S 曲线，并让控制点在针根处保持连续方向。
-6. 初始浮窗入场动画留下 12pt 偏移：改为直接落在目标 frame，仅保留透明度过渡；实测最终间隙为 8pt。
+## Menu-bar panel and settings
 
-## 交互检查
+- Clicking the menu-bar item always opens the full panel, even if a compact side panel is already visible.
+- The full panel and side panel are distinct panel modes and must rebuild their root view when the mode changes.
+- Settings must remain reachable from the full panel through the gear button.
+- Provider tabs use equal widths and a shared selected highlight.
+- Settings controls share one aligned right-hand control column.
+- Provider/settings switching keeps a stable panel footprint to avoid visible size jumps.
 
-- Claude、Codex、Gemini 使用同一套精确行中心锚点。
-- 侧栏已实测从右侧拖到左侧，再拖回右侧；两侧均贴物理屏幕边缘。
-- 自动折叠使用窗口级 mouseMoved 监听，移入展开、移出延迟折叠。
-- 状态栏入口继续打开完整详情面板；侧栏点击打开紧凑单 Provider 面板。
+## Motion language
 
-## 可接受差异
+- Use short, restrained ease-out motion for provider/content changes.
+- Reserve spring motion for tactile pill reveal/press interactions only.
+- Quota ring and bar changes interpolate smoothly but should not bounce.
+- Avoid animation replay when a value has not changed.
 
-- P3：参考图使用白色单色 Logo；本项目按既定品牌规范保留官方彩色 SVG。
-- P3：参考图展示 Used；本项目按产品规范继续展示 Remaining。
-- P3：圆环内底按本轮用户确认恢复为黑色。
+## Data semantics
 
-## 结论
+- Current product semantics display **remaining quota**, not used quota.
+- Codex data remains real local `rate_limits` data; no estimation.
+- Claude may show live, stale, estimated, or unavailable state according to its provider fallback rules.
+- Gemini remains an explicit unimplemented placeholder until a real provider is added.
 
-没有发现 P0、P1 或 P2 级视觉/交互问题。
+## Verification gates
 
-final result: passed
+CI verifies:
+
+- core parser tests
+- app compilation
+- Universal Binary build (`arm64` + `x86_64`)
+- bundle code-signature verification
+
+CI does **not** prove visual quality or interaction feel. After material UI changes, perform one local macOS pass covering:
+
+1. right-side dock
+2. left-side dock
+3. Claude → Codex → Gemini hover sweep
+4. side card → pill pointer movement without collapse
+5. menu-bar panel → Settings → back
+6. Chinese / English / Follow System
+7. auto-collapse and always-expanded modes
+
+A UI change is considered complete only after both CI and this local interaction pass succeed.

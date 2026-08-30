@@ -25,6 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailPanel = DetailPanelWindow(store: store, selection: selection)
         pillWindow = FloatingPillWindow(store: store, selection: selection)
 
+        pillWindow.companionHoverFrame = { [weak self] in
+            guard let self, self.detailPanel.isShown, !self.detailPanel.isMenuBarMode else { return nil }
+            return self.detailPanel.frame
+        }
+
         pillWindow.onProviderTapped = { [weak self] _, anchor, pillFrame, screen, side in
             guard let self else { return }
             self.store.refresh()
@@ -38,6 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         pillWindow.onProviderHovered = { [weak self] _, anchor, pillFrame, screen, side in
             guard let self else { return }
+
+            // Do not let a passive pill hover replace the full menu-bar panel
+            // while the user is reading settings or interacting with it.
+            if self.detailPanel.isShown && self.detailPanel.isMenuBarMode { return }
+
             self.detailPanel.showOrUpdate(
                 anchoredTo: anchor,
                 on: screen,
@@ -106,11 +116,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusItemClicked() {
         guard let button = statusItem.button else { return }
-        if detailPanel.isShown {
+
+        if detailPanel.isShown && detailPanel.isMenuBarMode {
             detailPanel.hide()
-        } else {
-            store.refresh()
-            detailPanel.show(relativeTo: button.bounds, of: button, side: nil)
+            return
         }
+
+        store.refresh()
+        detailPanel.show(relativeTo: button.bounds, of: button, side: nil)
     }
 }

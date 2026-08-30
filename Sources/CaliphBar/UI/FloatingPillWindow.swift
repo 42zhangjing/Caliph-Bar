@@ -17,10 +17,14 @@ final class FloatingPillWindow: NSObject {
     private var hoverGlobalMonitor: Any?
     private var hoverLocalMonitor: Any?
     private var hoverCollapseWorkItem: DispatchWorkItem?
+    private var lastHoveredProvider: ProviderID?
+    private var pointerWasInsidePill = false
+    private var lastHoverEvaluation: CFTimeInterval = 0
 
     var onProviderTapped: ((ProviderID, NSRect, NSRect, NSScreen, EdgeSide) -> Void)?
     var onProviderHovered: ((ProviderID, NSRect, NSRect, NSScreen, EdgeSide) -> Void)?
     var onPillMouseExited: (() -> Void)?
+    var companionHoverFrame: (() -> NSRect?)?
 
     private enum Keys {
         static let originY = "caliphbar.pillOriginY"
@@ -34,7 +38,12 @@ final class FloatingPillWindow: NSObject {
         position = PillPositionModel(side: storedSide)
 
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 58, height: 216),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: SideNotchLayout.windowSize.width,
+                height: SideNotchLayout.windowSize.height
+            ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -59,10 +68,6 @@ final class FloatingPillWindow: NSObject {
             self?.handleProviderAction(provider, isTap: true)
         }
 
-        position.onProviderHovered = { [weak self] provider in
-            self?.handleProviderAction(provider, isTap: false)
-        }
-
         position.onDragMoved = { [weak self] translation in
             self?.handleDrag(translation: translation, isEnded: false)
         }
@@ -73,7 +78,11 @@ final class FloatingPillWindow: NSObject {
 
         store.$pillBehavior
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateWindowFrame(animated: false) }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.lastHoveredProvider = nil
+                self.updateWindowFrame(animated: false)
+            }
             .store(in: &cancellables)
 
         installObservers()
@@ -96,6 +105,10 @@ final class FloatingPillWindow: NSObject {
     }
 
     func hide() {
+        hoverCollapseWorkItem?.cancel()
+        hoverCollapseWorkItem = nil
+        pointerWasInsidePill = false
+        lastHoveredProvider = nil
         panel.orderOut(nil)
     }
 
@@ -138,7 +151,9 @@ final class FloatingPillWindow: NSObject {
 
     private func handleProviderAction(_ provider: ProviderID, isTap: Bool) {
         if selection.selected != provider {
-            selection.selected = provider
+            withAnimation(.easeOut(duration: 0.14)) {
+                selection.selected = provider
+            }
         }
 
         guard
@@ -203,6 +218,7 @@ final class FloatingPillWindow: NSObject {
             UserDefaults.standard.set(proposedFrame.origin.y, forKey: Keys.originY)
             UserDefaults.standard.set(chosenSide.rawValue, forKey: Keys.side)
             dragStartFrame = nil
+            lastHoveredProvider = nil
         } else {
             panel.setFrameOrigin(proposedFrame.origin)
         }
@@ -227,45 +243,91 @@ final class FloatingPillWindow: NSObject {
     }
 
     private func updateHoverState(at point: NSPoint) {
-        if panel.frame.contains(point) {
+        let now = CACurrentMediaTime()
+        guard now - lastHoverEvaluation >= (1.0 / 90.0) else { return }
+        lastHoverEvaluation = now
+
+        let insidePill = hoverHitFrame().contains(point)
+
+        if insidePill {
+            pointerWasInsidePill = true
             hoverCollapseWorkItem?.cancel()
             hoverCollapseWorkItem = nil
+
             if store.pillBehavior == .autoCollapse && !position.isHovered {
                 withAnimation(.interpolatingSpring(stiffness: 280, damping: 24)) {
                     position.isHovered = true
                 }
             }
 
-            // Precise Provider hit-testing from global/local mouse position
-            let localYFromTop = panel.frame.maxY - point.y
-            let count = ProviderID.allCases.count
-            for (index, provider) in ProviderID.allCases.enumerated() {
-                let centerY = SideNotchLayout.providerCenterYFromTop(index: index, providerCount: count)
-                let halfHeight = (SideNotchLayout.itemSize.height + SideNotchLayout.itemSpacing) / 2
-                if abs(localYFromTop - centerY) <= halfHeight {
-                    handleProviderAction(provider, isTap: false)
-                    break
-                }
+            if let provider = provider(at: point), provider != lastHoveredProvider {
+                lastHoveredProvider = provider
+                handleProviderAction(provider, isTap: false)
             }
             return
         }
 
-        // Mouse exited pill window
-        onPillMouseExited?()
+        if pointerWasInsidePill {
+            pointerWasInsidePill = false
+            lastHoveredProvider = nil
+            onPillMouseExited?()
+        }
 
         guard store.pillBehavior == .autoCollapse, position.isHovered, hoverCollapseWorkItem == nil else { return }
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.hoverCollapseWorkItem = nil
-                guard !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
+                let mouse = NSEvent.mouseLocation
+                guard !self.hoverHitFrame().contains(mouse) else { return }
+                if let companion = self.companionHoverFrame?(), companion.contains(mouse) { return }
                 withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
                     self.position.isHovered = false
                 }
             }
         }
         hoverCollapseWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32, execute: workItem)
+    }
+
+    private func hoverHitFrame() -> NSRect {
+        if store.pillBehavior == .alwaysExpanded || position.isHovered {
+            return panel.frame
+        }
+
+        // The collapsed visual is intentionally tiny, but its hover target is
+        // slightly larger so it remains easy to reveal without creating a huge
+        // invisible window-wide hit area.
+        let width: CGFloat = 30
+        let height: CGFloat = 104
+        let x = position.side == .right ? panel.frame.maxX - width : panel.frame.minX
+        return NSRect(
+            x: x,
+            y: panel.frame.midY - height / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    private func provider(at point: NSPoint) -> ProviderID? {
+        let localYFromTop = panel.frame.maxY - point.y
+        let providers = ProviderID.allCases
+        var best: (provider: ProviderID, distance: CGFloat)?
+
+        for (index, provider) in providers.enumerated() {
+            let centerY = SideNotchLayout.providerCenterYFromTop(
+                index: index,
+                providerCount: providers.count
+            )
+            let distance = abs(localYFromTop - centerY)
+            if best == nil || distance < best!.distance {
+                best = (provider, distance)
+            }
+        }
+
+        guard let best else { return nil }
+        let activationRadius = (SideNotchLayout.itemSize.height + SideNotchLayout.itemSpacing) / 2
+        return best.distance <= activationRadius ? best.provider : nil
     }
 
     private func screenContainingPanel() -> NSScreen? {

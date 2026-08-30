@@ -7,7 +7,6 @@ struct RingView: View {
     var size: CGFloat = 42
 
     @State private var displayedFraction: Double = 0.0
-    @State private var hasAppeared = false
 
     var body: some View {
         ZStack {
@@ -18,7 +17,6 @@ struct RingView: View {
             Circle()
                 .stroke(Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.24), lineWidth: 3.5)
 
-            // Animated progress ring for remaining quota
             if remainingFraction != nil {
                 Circle()
                     .trim(from: 0, to: min(1, max(0.015, displayedFraction)))
@@ -37,19 +35,17 @@ struct RingView: View {
         }
         .frame(width: size, height: size)
         .onAppear {
-            if let fraction = remainingFraction {
-                withAnimation(.interpolatingSpring(stiffness: 140, damping: 18)) {
-                    displayedFraction = fraction
-                }
+            guard let fraction = remainingFraction else { return }
+            withAnimation(.easeOut(duration: 0.52)) {
+                displayedFraction = fraction
             }
-            hasAppeared = true
         }
         .onChange(of: remainingFraction) { newFraction in
             guard let newFraction else {
                 displayedFraction = 0.0
                 return
             }
-            withAnimation(.easeInOut(duration: 0.45)) {
+            withAnimation(.easeOut(duration: 0.24)) {
                 displayedFraction = newFraction
             }
         }

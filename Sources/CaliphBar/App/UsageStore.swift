@@ -103,16 +103,16 @@ final class UsageStore: ObservableObject {
     }
 
     func repairClaudeKeychainAccess() {
-        credentialRepairMessage = "Requesting Claude Code Keychain access…"
+        credentialRepairMessage = L10n.shared.claudeRepairRequesting
         Task.detached {
             let result = ClaudeCredentialLoader().repairKeychainAccess()
             await MainActor.run {
                 switch result {
                 case .success:
-                    self.credentialRepairMessage = "Claude Keychain access granted."
+                    self.credentialRepairMessage = L10n.shared.claudeRepairSuccess
                     self.refresh()
                 case let .failure(error):
-                    self.credentialRepairMessage = error.errorDescription ?? "Claude Keychain repair failed."
+                    self.credentialRepairMessage = L10n.shared.claudeRepairFailure(error.errorDescription)
                 }
             }
         }

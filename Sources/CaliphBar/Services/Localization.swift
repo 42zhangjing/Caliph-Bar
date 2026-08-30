@@ -11,7 +11,7 @@ public enum AppLanguage: String, CaseIterable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .system: return "跟随系统 (Follow System)"
+        case .system: return "Follow System"
         case .zhHans: return "简体中文"
         case .en: return "English"
         }
@@ -52,8 +52,6 @@ public final class L10n: ObservableObject {
             return preferred.starts(with: "zh")
         }
     }
-
-    // MARK: - Strings
 
     public var appTitle: String { "CaliphBar" }
 
@@ -123,20 +121,32 @@ public final class L10n: ObservableObject {
         isChinese ? "偏好设置" : "Settings"
     }
 
+    public var settingsGeneral: String {
+        isChinese ? "通用" : "General"
+    }
+
+    public var settingsInterface: String {
+        isChinese ? "界面" : "Interface"
+    }
+
+    public var settingsClaude: String {
+        "Claude"
+    }
+
     public var launchAtLogin: String {
         isChinese ? "开机自动启动" : "Launch at Login"
     }
 
     public var showFloatingPill: String {
-        isChinese ? "屏幕边缘悬浮胶囊" : "Show Floating Side Pill"
+        isChinese ? "显示屏幕边缘侧栏" : "Show Edge Pill"
     }
 
     public var notchBehaviorLabel: String {
-        isChinese ? "胶囊侧边栏形态" : "Notch Display Mode"
+        isChinese ? "侧栏显示方式" : "Pill Behavior"
     }
 
     public var notchBehaviorAuto: String {
-        isChinese ? "静默折叠 (悬停展开)" : "Auto Collapse (Hover to expand)"
+        isChinese ? "悬停展开" : "Expand on Hover"
     }
 
     public var notchBehaviorAlways: String {
@@ -151,8 +161,31 @@ public final class L10n: ObservableObject {
         isChinese ? "显示语言" : "Language"
     }
 
+    public var claudeKeychainTitle: String {
+        isChinese ? "Claude 凭据访问" : "Claude Credential Access"
+    }
+
+    public var claudeKeychainSubtitle: String {
+        isChinese ? "仅在你主动修复时请求系统授权" : "System permission is requested only when you repair access."
+    }
+
     public var claudeRepairKeychain: String {
-        isChinese ? "修复 Claude Keychain 权限" : "Repair Claude Keychain Access"
+        isChinese ? "修复权限" : "Repair Access"
+    }
+
+    public var claudeRepairRequesting: String {
+        isChinese ? "正在请求 Claude Code Keychain 权限…" : "Requesting Claude Code Keychain access…"
+    }
+
+    public var claudeRepairSuccess: String {
+        isChinese ? "Claude Keychain 权限已授权。" : "Claude Keychain access granted."
+    }
+
+    public func claudeRepairFailure(_ detail: String?) -> String {
+        if let detail, !detail.isEmpty {
+            return isChinese ? "Claude Keychain 修复失败：\(detail)" : "Claude Keychain repair failed: \(detail)"
+        }
+        return isChinese ? "Claude Keychain 修复失败。" : "Claude Keychain repair failed."
     }
 
     public var claudeNotFoundHelp: String {
@@ -160,7 +193,7 @@ public final class L10n: ObservableObject {
     }
 
     public var geminiUnimplemented: String {
-        isChinese ? "Gemini 当前未实现，敬请期待" : "Gemini is not implemented in CaliphBar 0.2."
+        isChinese ? "Gemini 当前未实现，敬请期待" : "Gemini is not implemented yet."
     }
 
     public var refresh: String {

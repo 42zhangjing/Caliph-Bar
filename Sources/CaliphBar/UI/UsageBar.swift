@@ -35,7 +35,7 @@ struct UsageBar: View {
                     Capsule()
                         .fill(StatusColor.color(for: window.remainingFraction))
                         .frame(width: max(4, geometry.size.width * CGFloat(min(1.0, max(0.0, window.remainingFraction)))))
-                        .animation(.interpolatingSpring(stiffness: 140, damping: 18), value: window.remainingFraction)
+                        .animation(.easeOut(duration: 0.24), value: window.remainingFraction)
                 }
             }
             .frame(height: 5)
@@ -47,4 +47,3 @@ struct UsageBar: View {
         }
     }
 }
-

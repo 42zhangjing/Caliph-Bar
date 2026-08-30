@@ -1,7 +1,7 @@
 import SwiftUI
 import CaliphBarCore
 
-enum EdgeSide: String, Codable {
+enum EdgeSide: String, Codable, Equatable {
     case left
     case right
 }
