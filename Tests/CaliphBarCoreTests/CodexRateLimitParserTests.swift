@@ -34,6 +34,20 @@ import Testing
         #expect(parsed?.planType == "pro")
     }
 
+    @Test func parsesAndSurfacesModelSpecificSparkBuckets() throws {
+        let json = #"{"id":2,"result":{"rateLimits":{"limitId":"codex","limitName":"Codex","primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1788200000},"secondary":{"usedPercent":60,"windowDurationMins":10080,"resetsAt":1788600000},"planType":"plus"},"rateLimitsByLimitId":{"codex":{"limitId":"codex","limitName":"Codex","primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1788200000},"secondary":{"usedPercent":60,"windowDurationMins":10080,"resetsAt":1788600000},"planType":"plus"},"codex-spark":{"limitId":"codex-spark","limitName":"GPT-5.3-Codex-Spark","primary":{"usedPercent":10,"windowDurationMins":300,"resetsAt":1788210000},"secondary":{"usedPercent":25,"windowDurationMins":10080,"resetsAt":1788610000},"planType":"plus"}}}}"#
+
+        let parsed = try #require(CodexAppServerRateLimitParser.parse(data: Data(json.utf8)))
+        #expect(parsed.extraRateLimits.count == 1)
+        #expect(parsed.extraRateLimits[0].id == "codex-spark")
+        #expect(parsed.extraRateLimits[0].primaryPercent == 10)
+        #expect(parsed.extraRateLimits[0].secondaryPercent == 25)
+
+        let windows = CodexProvider.normalizedWindows(from: parsed)
+        #expect(windows.map(\.id) == ["session", "weekly", "codex-spark-session", "codex-spark-weekly"])
+        #expect(windows.map { Int(($0.remainingFraction * 100).rounded()) } == [100, 40, 90, 75])
+    }
+
     @Test func mapsFiveHourAndWeeklyByDurationEvenWhenSlotsAreSwapped() {
         let limits = CodexRateLimits(
             primaryPercent: 60,
