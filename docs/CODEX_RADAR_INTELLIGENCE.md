@@ -1,181 +1,162 @@
-# Codex Radar Intelligence Layer
+# Codex Radar 公共情报层
 
-Status: **V1 runtime implemented for the personal CaliphBar build.**
+当前状态：个人版 CaliphBar 已实现 V1。
 
-CaliphBar keeps Codex Radar completely separate from account quota truth. The current implementation polls the public structured summary at `https://codexradar.com/current.json` every five minutes, keeps an independent cache, shows a compact Radar signal on the Codex pill, and can send deduplicated notifications when the public signal materially escalates.
+CaliphBar 把 Codex Radar 与账户真实额度严格分开。应用每五分钟读取一次 `https://codexradar.com/current.json`，使用独立缓存，在 Codex 侧边模块上显示简短信号；公共信号明显增强时，还可以发送去重后的通知。
 
-The richer `/api/v1/current` endpoint is **not** used by the current implementation. If CaliphBar is later distributed publicly or commercialized, re-check the source's then-current terms, attribution expectations, and rate guidance rather than assuming personal/private use rules carry over.
+当前版本没有使用功能更丰富的 `/api/v1/current`。如果以后公开分发或商业化，需要重新核对数据源当时的使用条款、署名要求和访问频率，不能把个人或私人使用条件直接沿用到公开产品。
 
-## Non-negotiable separation
+## 两层数据不能混合
 
 ```text
-Layer 1 — Account Truth                 Layer 2 — Public Intelligence
-──────────────────────                  ─────────────────────────────
-My real 5-hour remaining                Global/community reset signal
-My real weekly remaining                24h / 48h reset probability
-My exact account reset timestamp        Public event state
-My provider source state                Historical reset pattern
+第 1 层 账户真实额度                 第 2 层 公共情报
+──────────────────                 ──────────────
+我的真实 5 小时剩余额度              全球或社区重置信号
+我的真实每周剩余额度                 24H / 48H 重置概率
+我的账户准确重置时间                 公共事件状态
+Provider 数据状态                   历史重置分布
 ```
 
-A Radar prediction must never alter the user's real Codex percentage or normal reset timestamp.
+Radar 的预测不能改写用户真实的 Codex 百分比或重置时间。
 
-## V1 data source
-
-Current personal build:
+## V1 数据源
 
 ```text
 GET https://codexradar.com/current.json
 ```
 
-Properties of the integration:
+当前实现具备以下约束。
 
-- five-minute polling, not the 60-second account-provider cadence
-- ephemeral `URLSession`
-- no Codex OAuth token, cookie, credential, transcript, or local quota value is sent
-- parser accepts unknown fields and several camelCase/snake_case variants
-- last-known-good Radar data is cached independently from provider snapshots
-- public-intelligence failure cannot block Claude/Codex/Antigravity account refresh
+- 每五分钟轮询一次，与账户 Provider 的 60 秒刷新周期分开。
+- 使用临时 `URLSession`。
+- 不发送 Codex OAuth token、Cookie、凭据、对话内容或本地额度值。
+- 解析器容忍未知字段，并兼容多种 camelCase 与 snake_case 命名。
+- 最近一次可用的 Radar 数据独立缓存。
+- 公共情报读取失败不能阻塞 Claude、Codex 或 Antigravity 的账户额度刷新。
 
-Do not scrape rendered HTML when a usable structured source is available.
+已有结构化数据源时，不抓取网页渲染结果。
 
 ## RESET SIGNAL
 
-CaliphBar maps public source evidence into a deliberately small state machine:
+内部状态机保持精简。
 
 ```text
-QUIET    weak/no actionable signal
-WATCH    meaningful evidence/probability
-HOT      active/high-confidence/open-window signal
-STALE    cached intelligence is too old
-OFFLINE  no usable Radar source/cache
+QUIET    没有值得采取行动的信号
+WATCH    出现值得关注的证据或概率
+HOT      信号活跃、可信度较高或重置窗口已开启
+STALE    缓存数据更新时间超过两小时
+OFFLINE  当前没有可用数据源或缓存
 ```
 
-The edge pill shows only a small signal dot next to the **real Codex remaining percentage**. The quota number itself always comes from Layer 1.
+这些英文名只用于代码。界面使用明确文案，例如 `暂无重置信号`、`值得关注`、`强重置信号`、`数据超2小时未更新` 和 `情报离线`，避免使用含义不清的 `QUIET` 或 `情报已过期`。
 
-Current default interpretation includes:
+侧边栏只在真实 Codex 剩余百分比旁显示一个小信号点。百分比始终来自第 1 层。
 
-- explicit open window -> `HOT`
-- strong/high/confirmed/active source language -> `HOT`
-- 24h probability >= 65% -> `HOT`
-- watch/medium/likely/pending/possible language -> `WATCH`
-- 24h probability >= 35% -> `WATCH`
-- otherwise -> `QUIET`
+默认映射规则如下。
 
-These thresholds are CaliphBar presentation policy, not Codex Radar claims. If the source later defines authoritative levels, prefer the source semantics and document the mapping.
+- 数据源明确表示窗口已开启时为 `HOT`。
+- 数据源出现 strong、high、confirmed 或 active 等强信号时为 `HOT`。
+- 24H 概率不低于 65% 时为 `HOT`。
+- 数据源出现 watch、medium、likely、pending 或 possible 等提示时为 `WATCH`。
+- 24H 概率不低于 35% 时为 `WATCH`。
+- 其余情况为 `QUIET`。
 
-## Notifications
+这些阈值属于 CaliphBar 的显示策略，不代表 Codex Radar 的官方结论。数据源以后若提供权威等级，应优先采用其语义，并记录映射关系。
 
-Notify on meaningful **state transitions**, not every polling result.
+Radar 概率是中性信息，不等于账户健康度。`QUIET`、`STALE` 和 `OFFLINE` 使用中性色；只有 `WATCH` 与 `HOT` 使用黄色或红色提醒。
 
-Examples:
+## 通知
+
+通知只在状态明显升级时触发，不会随每次轮询重复发送。
 
 ```text
 QUIET -> WATCH
 WATCH -> HOT
 ```
 
-First launch never replays an already-existing old signal. A small persisted state fingerprint prevents restart spam.
+首次启动不会重放已经存在的旧信号。应用会保存一个很小的状态指纹，防止重启后重复提醒。
 
-Example notification:
+通知示例。
 
 ```text
 Codex Reset Radar
 检测到高强度额度重置信号
 ```
 
-or, when an explicit public window is open:
+重置窗口明确开启时显示。
 
 ```text
 Codex Reset Radar
 检测到新的额度重置窗口信号
 ```
 
-## Personal Confirmation
+## 本机确认
 
-CaliphBar can correlate public intelligence with the user's **real local Codex quota change**, entirely on-device.
-
-Example:
+CaliphBar 可以在设备上把公共情报与用户真实的 Codex 额度变化关联起来。
 
 ```text
-RESET CONFIRMED LOCALLY
+本机已确认重置
 
-weekly remaining
+每周剩余额度
 7% -> 100%
 ```
 
-Current detector stores only a tiny rolling record:
+检测器只保存少量滚动记录。
 
 ```text
-session remaining
-weekly remaining
-session reset timestamp
-weekly reset timestamp
-observed time
+当前会话剩余额度
+每周剩余额度
+当前会话重置时间
+每周重置时间
+观测时间
 ```
 
-A local confirmation requires a large upward quota jump plus reset-boundary evidence. Conversation content is never stored for this feature, and the observation is never uploaded to Codex Radar.
+只有本地额度大幅上升，并且同时跨过重置边界，才可能确认重置。只有在新鲜的 Radar `WATCH` 或 `HOT` 信号同时存在时，界面才显示关联确认。对话内容不会保存，这些观测值也不会上传给 Codex Radar。
 
-This creates a trust hierarchy:
+可信关系依次为：Radar 提示全球可能正在发生变化；CaliphBar 在本机读取用户真实额度；本地额度确实跨过重置边界后，应用才会说明这台 Mac 已确认重置。
 
-1. Radar says something may be happening globally.
-2. CaliphBar reads the user's real account quota locally.
-3. If the local quota actually jumps across a reset boundary, CaliphBar can call it confirmed on this Mac.
+## 历史分布
 
-## Historical pattern
-
-Historical distributions are context, not forecasts.
-
-Prefer:
+历史分布只提供背景，不能写成未来预测。
 
 ```text
-HISTORICAL WINDOW
+历史窗口
 00:00–08:59
-21 / 34 historical resets
+34 次历史重置中有 21 次发生于此
 ```
 
-Do not rename that to `NEXT RESET` unless the source itself provides a real predicted window. This avoids false precision.
+除非数据源真的提供预测窗口，否则不能把它命名为 `下次重置`。
 
-## Optional future UI
+## 界面范围
 
-A later full-panel treatment may show a restrained detail strip:
+完整面板可以显示一条克制的详情。
 
 ```text
-RESET RADAR     WATCH
+RESET RADAR     值得关注
 24H             42%
-updated         07:20
-source          Codex Radar
+更新于           07:20
+来源             Codex Radar
 ```
 
-The menu-bar/edge pill should remain compact. Detailed IQ, cost, model-health, history, or benchmark views belong behind the full panel or an external source link.
+菜单栏和侧边栏继续保持紧凑。IQ、成本、模型健康度、历史记录或基准测试等详细内容应放进完整面板，或通过来源链接查看。
 
-## Optional Phase 2 — Model Health
+未来可以增加一个很小的模型健康状态，例如 `Sol xhigh 性能下降`，但不能把 CaliphBar 变成通用基准测试看板。
 
-Codex Radar exposes broader model/community intelligence. CaliphBar may later surface one tiny actionable state such as:
+## 隐私、署名与分发
 
-```text
-MODEL HEALTH
-Sol xhigh   ↓ degraded
-```
+Radar 请求只读取公共数据，不包含 Claude、Codex 或 Antigravity 凭据，也不包含账户额度。
 
-Do not turn CaliphBar into a general benchmark dashboard.
+本机确认完全在设备上计算。CaliphBar 不得把私人额度历史上传给 Radar 数据源。
 
-## Privacy
+当前私人版本应在代码、帮助信息和来源链接中保留 Codex Radar 身份。若将来公开分发或商业化，发布前必须重新核对其使用条款、署名与访问频率要求。
 
-Radar requests are public-data reads. They contain no Claude/Codex/Antigravity credentials and no account quota values.
+## V1 完成条件
 
-Personal Confirmation is computed entirely on-device. CaliphBar must never upload private quota history to the Radar source.
-
-## Attribution and distribution
-
-For the current personal build, keep the source identity visible in code/UI help and source links. If the project is distributed publicly or commercialized later, re-check Codex Radar's current terms and requested attribution/rate policy before release.
-
-## Definition of done for V1
-
-- account truth and Radar are semantically separate
-- live Codex quota is not sourced from Radar
-- public structured Radar source is polled independently
-- transition notifications are deduplicated
-- stale/offline states fail safely
-- Radar failure cannot break account providers
-- private quota history is never uploaded
-- large local quota resets can be confirmed on-device
+- 账户真实额度与 Radar 在语义和界面上分开。
+- Codex 实时额度不来自 Radar。
+- 公共结构化数据独立轮询。
+- 状态通知能够去重。
+- 数据超时或离线时安全降级。
+- Radar 故障不影响账户 Provider。
+- 私人额度历史不会上传。
+- 本地额度发生大幅重置时可以在设备上确认。

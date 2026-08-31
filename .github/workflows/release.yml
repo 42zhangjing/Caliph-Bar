@@ -1,0 +1,35 @@
+name: macOS Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag and release notes
+        run: |
+          APP_VERSION="$(sed -n 's/.*<string>\([0-9][^<]*\)<\/string>.*/\1/p' build-app.sh | head -1)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          test "$APP_VERSION" = "$TAG_VERSION"
+          test -f "docs/releases/$GITHUB_REF_NAME.md"
+      - name: Test
+        run: swift test
+      - name: Package Universal app
+        run: ./package-release.sh
+      - name: Publish private prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.zip \
+            dist/*.sha256 \
+            --title "CaliphBar $GITHUB_REF_NAME" \
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
+            --prerelease
