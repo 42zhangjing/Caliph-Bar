@@ -122,7 +122,10 @@ struct CodexRadarDetailStrip: View {
     }
 
     private var freshConfirmation: CodexLocalResetConfirmation? {
-        guard let confirmation = radar.localConfirmation,
+        // "Local confirmed" is a correlation label, not merely a local quota jump.
+        // Only surface it while the independent public Radar is actively WATCH/HOT.
+        guard radar.signal == .watch || radar.signal == .hot,
+              let confirmation = radar.localConfirmation,
               Date().timeIntervalSince(confirmation.observedAt) < 6 * 60 * 60
         else { return nil }
         return confirmation
