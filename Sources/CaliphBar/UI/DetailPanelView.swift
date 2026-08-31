@@ -160,7 +160,10 @@ struct SideDetailPanelView: View {
                         .foregroundStyle(.white.opacity(0.42))
                 }
 
-                Spacer(minLength: 10)
+                Spacer(minLength: 8)
+                if item.provider == .codex {
+                    CodexRadarBadge()
+                }
                 sourceIndicator(item.source)
             }
 
@@ -293,8 +296,9 @@ struct DetailPanelView: View {
 
     private let backgroundColor = Color(red: 0.045, green: 0.046, blue: 0.052)
     private let cardWidth: CGFloat = 342
-    // Keep one footprint across providers/settings while leaving room for four Codex lanes.
-    private let contentHeight: CGFloat = 326
+    // One stable footprint across providers/settings, including four Codex quota lanes
+    // plus the independent Reset Radar strip.
+    private let contentHeight: CGFloat = 430
 
     var body: some View {
         cardContent
@@ -434,6 +438,11 @@ struct DetailPanelView: View {
                         .foregroundStyle(.white.opacity(0.36))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            if item.provider == .codex {
+                CodexRadarDetailStrip()
+                    .padding(.top, 1)
             }
         }
     }
