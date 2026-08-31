@@ -108,35 +108,122 @@ public struct CodexProvider: UsageProvider {
             )
         }
 
+        var windows: [UsageWindow] = []
         let hasDurationMetadata = lanes.contains { $0.windowMinutes != nil }
         if hasDurationMetadata {
-            var windows: [UsageWindow] = []
-            if let session = lanes.first(where: { $0.windowMinutes.map { abs($0 - 300) < 0.5 } == true }),
+            if let session = lanes.first(where: { isFiveHour($0.windowMinutes) }),
                let window = makeWindow(session, id: "session", title: "Current session")
             {
                 windows.append(window)
             }
-            if let weekly = lanes.first(where: { $0.windowMinutes.map { abs($0 - 10_080) < 0.5 } == true }),
+            if let weekly = lanes.first(where: { isWeekly($0.windowMinutes) }),
                let window = makeWindow(weekly, id: "weekly", title: "Weekly limit")
             {
                 windows.append(window)
             }
-            return windows
+        } else {
+            // Backward compatibility for historical rollout payloads that had no duration metadata.
+            if let primary = lanes.first,
+               let window = makeWindow(primary, id: "session", title: "Current session")
+            {
+                windows.append(window)
+            }
+            if lanes.count > 1,
+               let window = makeWindow(lanes[1], id: "weekly", title: "Weekly limit")
+            {
+                windows.append(window)
+            }
         }
 
-        // Backward compatibility for historical rollout payloads that had no duration metadata.
-        var windows: [UsageWindow] = []
-        if let primary = lanes.first,
-           let window = makeWindow(primary, id: "session", title: "Current session")
-        {
-            windows.append(window)
-        }
-        if lanes.count > 1,
-           let window = makeWindow(lanes[1], id: "weekly", title: "Weekly limit")
-        {
-            windows.append(window)
+        // Current Codex app-server exposes a multi-bucket view keyed by metered limit id.
+        // Model-specific buckets (for example Codex Spark) remain account truth and are
+        // appended after the ordinary 5-hour / weekly lanes. Rollout fallback has no such data.
+        if !discardExpired {
+            for extra in limits.extraRateLimits {
+                windows.append(contentsOf: extraWindows(from: extra))
+            }
         }
         return windows
+    }
+
+    private static func extraWindows(from extra: CodexExtraRateLimit) -> [UsageWindow] {
+        let label = extra.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseLabel = (label?.isEmpty == false ? label! : extra.id)
+        let spark = [extra.id, label]
+            .compactMap { $0?.lowercased() }
+            .contains { $0.contains("spark") }
+        let slug = stableSlug(extra.id)
+
+        var candidates: [(RawLane, Bool)] = []
+        if let primary = extra.primaryPercent {
+            candidates.append((RawLane(
+                usedPercent: primary,
+                resetsAt: extra.primaryResetsAt,
+                windowMinutes: extra.primaryWindowMinutes
+            ), true))
+        }
+        if let secondary = extra.secondaryPercent {
+            candidates.append((RawLane(
+                usedPercent: secondary,
+                resetsAt: extra.secondaryResetsAt,
+                windowMinutes: extra.secondaryWindowMinutes
+            ), false))
+        }
+
+        return candidates.enumerated().map { index, candidate in
+            let lane = candidate.0
+            let primaryFallback = candidate.1
+            let kind: String
+            if isFiveHour(lane.windowMinutes) {
+                kind = "session"
+            } else if isWeekly(lane.windowMinutes) {
+                kind = "weekly"
+            } else {
+                kind = primaryFallback ? "session" : "weekly"
+            }
+
+            let id: String
+            let title: String
+            if spark {
+                if kind == "weekly" {
+                    id = "codex-spark-weekly"
+                    title = "Codex Spark Weekly"
+                } else {
+                    id = "codex-spark-session"
+                    title = "Codex Spark 5-hour"
+                }
+            } else {
+                id = "codex-extra-\(slug)-\(kind)-\(index)"
+                title = kind == "weekly" ? "\(baseLabel) Weekly" : "\(baseLabel) 5-hour"
+            }
+
+            return UsageWindow(
+                id: id,
+                title: title,
+                usedFraction: lane.usedPercent / 100.0,
+                resetsAt: lane.resetsAt
+            )
+        }
+    }
+
+    private static func isFiveHour(_ minutes: Double?) -> Bool {
+        guard let minutes else { return false }
+        return abs(minutes - 300) < 0.5
+    }
+
+    private static func isWeekly(_ minutes: Double?) -> Bool {
+        guard let minutes else { return false }
+        return abs(minutes - 10_080) < 0.5
+    }
+
+    private static func stableSlug(_ value: String) -> String {
+        let scalars = value.lowercased().unicodeScalars.map { scalar -> Character in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(String(scalar)) : "-"
+        }
+        let raw = String(scalars)
+        return raw
+            .split(separator: "-", omittingEmptySubsequences: true)
+            .joined(separator: "-")
     }
 
     private static func rolloutFallback(

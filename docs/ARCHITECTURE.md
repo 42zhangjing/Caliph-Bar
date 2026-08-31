@@ -50,7 +50,11 @@ Preferred live usage comes from Anthropic using Claude Code credentials. Backgro
 
 ### Codex
 
-CaliphBar reads real local `rate_limits` emitted by Codex into `rollout-*.jsonl`. This is intentionally conservative: no quota estimation and no private ChatGPT backend dependency for normal quota monitoring.
+CaliphBar prefers the official local Codex `app-server` JSON-RPC method `account/rateLimits/read`. A successful RPC response is account truth and is labeled `LIVE`; no Codex OAuth token is read by CaliphBar and no private ChatGPT HTTP usage endpoint is called directly.
+
+The app-server response contains the ordinary five-hour and weekly windows and may also expose a multi-bucket `rateLimitsByLimitId` map. Model-specific buckets such as Codex Spark are surfaced as additional account-truth windows rather than collapsed into the ordinary two lanes. Window duration metadata is preferred over transport slot order when deciding whether a lane is five-hour or weekly.
+
+Local `rollout-*.jsonl` rate-limit observations are fallback evidence only. Expired lanes are discarded and any usable rollout fallback is labeled `STALE`, never `LIVE`.
 
 ### Antigravity
 
@@ -88,8 +92,8 @@ See `docs/CODEX_RADAR_INTELLIGENCE.md` for the current design.
 ## UI surfaces
 
 - Floating edge pill: quick provider state and remaining quota.
-- Compact side detail panel: fixed-size provider details; hover switching should glide rather than resize.
-- Full menu-bar panel: provider tabs, settings, richer information.
+- Compact side detail panel: fixed-size provider details; hover switching should glide rather than resize. Codex may show up to four quota lanes when model-specific limits are returned.
+- Full menu-bar panel: provider tabs, settings, richer information with the same stable footprint across provider switching.
 - Public intelligence should be secondary to the account quota: a small Radar indicator in the Codex view, with details on demand.
 
 ## Persistence

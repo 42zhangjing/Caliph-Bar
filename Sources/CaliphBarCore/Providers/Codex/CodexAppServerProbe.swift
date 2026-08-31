@@ -28,20 +28,132 @@ enum CodexAppServerRateLimitParser {
         else { return nil }
 
         let secondary = dictionary(rateLimits["secondary"])
+        let primaryResetsAt = date(primary["resetsAt"] ?? primary["resets_at"])
+        let primaryWindowMinutes = number(primary["windowDurationMins"] ?? primary["window_duration_mins"])
+        let secondaryPercent = number(secondary?["usedPercent"] ?? secondary?["used_percent"])
+        let secondaryResetsAt = date(secondary?["resetsAt"] ?? secondary?["resets_at"])
+        let secondaryWindowMinutes = number(secondary?["windowDurationMins"] ?? secondary?["window_duration_mins"])
+
         return CodexRateLimits(
             primaryPercent: primaryPercent,
-            primaryResetsAt: date(primary["resetsAt"] ?? primary["resets_at"]),
-            primaryWindowMinutes: number(primary["windowDurationMins"] ?? primary["window_duration_mins"]),
-            secondaryPercent: number(secondary?["usedPercent"] ?? secondary?["used_percent"]),
-            secondaryResetsAt: date(secondary?["resetsAt"] ?? secondary?["resets_at"]),
-            secondaryWindowMinutes: number(secondary?["windowDurationMins"] ?? secondary?["window_duration_mins"]),
-            planType: string(rateLimits["planType"] ?? rateLimits["plan_type"])
+            primaryResetsAt: primaryResetsAt,
+            primaryWindowMinutes: primaryWindowMinutes,
+            secondaryPercent: secondaryPercent,
+            secondaryResetsAt: secondaryResetsAt,
+            secondaryWindowMinutes: secondaryWindowMinutes,
+            planType: string(rateLimits["planType"] ?? rateLimits["plan_type"]),
+            extraRateLimits: parseExtraRateLimits(
+                result: result,
+                main: MainWindowSignature(
+                    primaryPercent: primaryPercent,
+                    primaryResetsAt: primaryResetsAt,
+                    primaryWindowMinutes: primaryWindowMinutes,
+                    secondaryPercent: secondaryPercent,
+                    secondaryResetsAt: secondaryResetsAt,
+                    secondaryWindowMinutes: secondaryWindowMinutes
+                )
+            )
         )
     }
 
     static func parse(data: Data) -> CodexRateLimits? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return parse(message: object)
+    }
+
+    private struct MainWindowSignature {
+        let primaryPercent: Double
+        let primaryResetsAt: Date?
+        let primaryWindowMinutes: Double?
+        let secondaryPercent: Double?
+        let secondaryResetsAt: Date?
+        let secondaryWindowMinutes: Double?
+    }
+
+    private static func parseExtraRateLimits(
+        result: [String: Any],
+        main: MainWindowSignature
+    ) -> [CodexExtraRateLimit] {
+        guard let byLimitID = dictionary(result["rateLimitsByLimitId"] ?? result["rate_limits_by_limit_id"]) else {
+            return []
+        }
+
+        return byLimitID.compactMap { key, rawValue -> CodexExtraRateLimit? in
+            guard let snapshot = dictionary(rawValue) else { return nil }
+
+            let limitID = string(snapshot["limitId"] ?? snapshot["limit_id"]) ?? key
+            let limitName = string(snapshot["limitName"] ?? snapshot["limit_name"])
+            let primary = dictionary(snapshot["primary"])
+            let secondary = dictionary(snapshot["secondary"])
+            let primaryPercent = number(primary?["usedPercent"] ?? primary?["used_percent"])
+            let primaryResetsAt = date(primary?["resetsAt"] ?? primary?["resets_at"])
+            let primaryWindowMinutes = number(primary?["windowDurationMins"] ?? primary?["window_duration_mins"])
+            let secondaryPercent = number(secondary?["usedPercent"] ?? secondary?["used_percent"])
+            let secondaryResetsAt = date(secondary?["resetsAt"] ?? secondary?["resets_at"])
+            let secondaryWindowMinutes = number(secondary?["windowDurationMins"] ?? secondary?["window_duration_mins"])
+
+            guard primaryPercent != nil || secondaryPercent != nil else { return nil }
+
+            // `rateLimitsByLimitId` includes the ordinary Codex bucket as well as any
+            // model-specific buckets. Exclude the ordinary bucket so the main 5h/weekly
+            // lanes are not duplicated in the UI.
+            let normalizedID = limitID.lowercased()
+            let normalizedKey = key.lowercased()
+            if normalizedID == "codex" || normalizedKey == "codex" {
+                return nil
+            }
+            if sameAsMain(
+                primaryPercent: primaryPercent,
+                primaryResetsAt: primaryResetsAt,
+                primaryWindowMinutes: primaryWindowMinutes,
+                secondaryPercent: secondaryPercent,
+                secondaryResetsAt: secondaryResetsAt,
+                secondaryWindowMinutes: secondaryWindowMinutes,
+                main: main
+            ) {
+                return nil
+            }
+
+            return CodexExtraRateLimit(
+                id: limitID,
+                name: limitName,
+                primaryPercent: primaryPercent,
+                primaryResetsAt: primaryResetsAt,
+                primaryWindowMinutes: primaryWindowMinutes,
+                secondaryPercent: secondaryPercent,
+                secondaryResetsAt: secondaryResetsAt,
+                secondaryWindowMinutes: secondaryWindowMinutes
+            )
+        }
+        .sorted { lhs, rhs in
+            let lhsSpark = isSpark(lhs)
+            let rhsSpark = isSpark(rhs)
+            if lhsSpark != rhsSpark { return lhsSpark && !rhsSpark }
+            return lhs.id.localizedCaseInsensitiveCompare(rhs.id) == .orderedAscending
+        }
+    }
+
+    private static func isSpark(_ limit: CodexExtraRateLimit) -> Bool {
+        [limit.id, limit.name]
+            .compactMap { $0?.lowercased() }
+            .contains { $0.contains("spark") }
+    }
+
+    private static func sameAsMain(
+        primaryPercent: Double?,
+        primaryResetsAt: Date?,
+        primaryWindowMinutes: Double?,
+        secondaryPercent: Double?,
+        secondaryResetsAt: Date?,
+        secondaryWindowMinutes: Double?,
+        main: MainWindowSignature
+    ) -> Bool {
+        primaryPercent == main.primaryPercent &&
+            primaryResetsAt == main.primaryResetsAt &&
+            primaryWindowMinutes == main.primaryWindowMinutes &&
+            secondaryPercent == main.secondaryPercent &&
+            secondaryResetsAt == main.secondaryResetsAt &&
+            secondaryWindowMinutes == main.secondaryWindowMinutes
     }
 
     private static func dictionary(_ value: Any?) -> [String: Any]? {
