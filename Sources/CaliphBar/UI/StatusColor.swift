@@ -38,11 +38,11 @@ enum StatusColor {
 
     static func nsValueColor(for remainingFraction: Double) -> NSColor {
         if remainingFraction < 0.10 {
-            return .systemRed
+            return NSColor(calibratedRed: 1.0, green: 0.271, blue: 0.227, alpha: 1.0)
         } else if remainingFraction < 0.20 {
-            return .systemOrange
+            return NSColor(calibratedRed: 1.0, green: 0.624, blue: 0.039, alpha: 1.0)
         } else {
-            return .secondaryLabelColor
+            return NSColor.labelColor.withAlphaComponent(0.68)
         }
     }
 
