@@ -107,12 +107,23 @@ public final class L10n: ObservableObject {
         isChinese ? "离线" : "OFFLINE"
     }
 
-    public func resetsText(at date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = isChinese ? Locale(identifier: "zh_CN") : Locale(identifier: "en_US")
-        formatter.dateFormat = isChinese ? "E HH:mm" : "E h:mm a"
-        let str = formatter.string(from: date)
-        return isChinese ? "重置于 \(str)" : "Resets \(str)"
+    public func resetsText(at date: Date, relativeTo now: Date = Date()) -> String {
+        let secondsRemaining = date.timeIntervalSince(now)
+        guard secondsRemaining > 0 else {
+            return isChinese ? "即将重置" : "Reset due"
+        }
+        let totalMinutes = max(1, Int(ceil(secondsRemaining / 60)))
+        let days = totalMinutes / (24 * 60)
+        let hours = (totalMinutes % (24 * 60)) / 60
+        let minutes = totalMinutes % 60
+
+        var components: [String] = []
+        if days > 0 { components.append("\(days)d") }
+        if hours > 0 || days > 0 { components.append("\(hours)h") }
+        components.append("\(minutes)m")
+
+        let duration = components.joined(separator: " ")
+        return isChinese ? "\(duration) 后重置" : "Resets in \(duration)"
     }
 
     public func updatedAtText(date: Date?) -> String {

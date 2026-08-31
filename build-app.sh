@@ -5,6 +5,23 @@ cd "$(dirname "$0")"
 APP_NAME="CaliphBar"
 BUNDLE_ID="dev.chengyu.caliphbar"
 APP="$APP_NAME.app"
+EDGE_SVG="Resources/Shapes/caliph-edge-tab.svg"
+EDGE_SWIFT="Sources/CaliphBar/UI/SideNotchShape.swift"
+
+if ! diff -u \
+  <(sed -nE 's/^[[:space:]]*C ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+)/\1 \2 \3 \4 \5 \6/p' "$EDGE_SVG") \
+  <(sed -nE 's/.*control1: \.init\(x: ([0-9.]+), y: ([0-9.]+)\), control2: \.init\(x: ([0-9.]+), y: ([0-9.]+)\), end: \.init\(x: ([0-9.]+), y: ([0-9.]+)\).*/\1 \2 \3 \4 \5 \6/p' "$EDGE_SWIFT")
+then
+  echo "Canonical edge-tab SVG and Swift path coordinates differ." >&2
+  exit 1
+fi
+
+EDGE_SVG_STRAIGHT=$(sed -nE 's/^[[:space:]]*L (0) ([0-9.]+)$/\1 \2/p' "$EDGE_SVG")
+EDGE_SWIFT_STRAIGHT=$(sed -nE 's/.*straightEdgeBottom = CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\).*/\1 \2/p' "$EDGE_SWIFT")
+if [ "$EDGE_SVG_STRAIGHT" != "$EDGE_SWIFT_STRAIGHT" ]; then
+  echo "Canonical edge-tab straight edge coordinates differ." >&2
+  exit 1
+fi
 
 echo "Building universal CaliphBar binary (arm64 + x86_64)…"
 swift build -c release --triple arm64-apple-macosx
@@ -37,9 +54,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>$APP_NAME</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
+  <string>0.2.1</string>
   <key>CFBundleVersion</key>
-  <string>2</string>
+  <string>3</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>

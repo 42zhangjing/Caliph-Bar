@@ -245,9 +245,10 @@ private struct CompactUsageBar: View {
 
                 if let reset = window.resetsAt {
                     Text(l10n.resetsText(at: reset))
-                        .font(.system(size: 9))
+                        .font(.system(size: 9, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.34))
+                        .foregroundStyle(.white.opacity(0.68))
+                        .help(reset.formatted(date: .abbreviated, time: .shortened))
                 }
             }
 

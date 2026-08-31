@@ -24,9 +24,9 @@ struct UsageBar: View {
                 Spacer()
                 if let reset = window.resetsAt {
                     Text(l10n.resetsText(at: reset))
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 10.5, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.white.opacity(0.68))
                         .help(reset.formatted(date: .abbreviated, time: .shortened))
                 }
             }

@@ -103,6 +103,7 @@ CaliphBar 有两个必须独立的数据层。
 
 - 浮窗和详情面使用自定义 `NSPanel`，不使用 `NSPopover`。
 - 边缘侧栏是一条连续的自定义路径，不得拆成 `Capsule + connector`。
+- 展开与收起状态的轮廓以 `Resources/Shapes/caliph-edge-tab.svg` 为唯一几何母版；`SideNotchShape.swift` 必须精确转录该 Path 并保持 `210:1138` 等比缩放，不得近似重画、独立拉伸宽高或用通用圆角形状替换。
 - 左右停靠必须严格镜像。
 - 默认三项可见尺寸为 `62 × 288` pt，可选四项 Radar 模式为 `62 × 328` pt。屏幕外防缝区不得裁掉上下可见端点。
 - 侧栏转角使用曲率逐渐降为 0 的贝塞尔控制点，不得用通用 squircle 替换整条非对称轮廓。

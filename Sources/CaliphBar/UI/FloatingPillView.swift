@@ -36,11 +36,21 @@ struct FloatingPillView: View {
     }
 
     private var surfaceWidth: CGFloat {
-        isExpanded ? windowSize.width : 16
+        if isExpanded { return windowSize.width }
+        return SideNotchLayout.silhouetteWidth(forHeight: SideNotchLayout.collapsedHeight)
+            + SideNotchLayout.edgeBleed
     }
 
     private var surfaceHeight: CGFloat {
-        isExpanded ? windowSize.height : 76
+        isExpanded ? windowSize.height : SideNotchLayout.collapsedHeight
+    }
+
+    private var expandedSilhouetteWidth: CGFloat {
+        SideNotchLayout.silhouetteWidth(forHeight: windowSize.height)
+    }
+
+    private var contentEdgeOffset: CGFloat {
+        position.side == .right ? -SideNotchLayout.edgeBleed : SideNotchLayout.edgeBleed
     }
 
     private var windowSize: CGSize {
@@ -65,11 +75,13 @@ struct FloatingPillView: View {
     private var pillSurface: some View {
         ZStack(alignment: edgeAlignment) {
             EdgePillShape(side: position.side)
-                .fill(Color(red: 0.020, green: 0.021, blue: 0.026))
+                .fill(Color.black)
                 .allowsHitTesting(false)
 
             if isExpanded {
                 expandedContent
+                    .frame(width: expandedSilhouetteWidth, height: windowSize.height)
+                    .offset(x: contentEdgeOffset)
                     .transition(
                         .move(edge: position.side == .right ? .trailing : .leading)
                             .combined(with: .opacity)
@@ -108,12 +120,6 @@ struct FloatingPillView: View {
                 }
             }
         }
-        .frame(width: SideNotchLayout.visibleWidth, height: windowSize.height)
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: position.side == .right ? .leading : .trailing
-        )
     }
 
     private var dragGesture: some Gesture {

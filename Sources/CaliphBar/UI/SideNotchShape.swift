@@ -10,13 +10,22 @@ enum SideNotchLayout {
     static let visibleWidth: CGFloat = 62
     static let compactWindowSize = CGSize(width: visibleWidth + edgeBleed, height: 288)
     static let radarWindowSize = CGSize(width: visibleWidth + edgeBleed, height: 328)
+    static let collapsedHeight: CGFloat = 76
     static let itemSize = CGSize(width: 48, height: 56)
     static let itemSpacing: CGFloat = 8
     static let ringSize: CGFloat = 39
     static let percentageFontSize: CGFloat = 10.5
 
+    /// The canonical silhouette is stored in `Resources/Shapes/caliph-edge-tab.svg`.
+    /// Width is always derived from height so no view state can stretch the curve.
+    static let canonicalAspectRatio: CGFloat = 210 / 1138
+
     static func windowSize(radarPinned: Bool) -> CGSize {
         radarPinned ? radarWindowSize : compactWindowSize
+    }
+
+    static func silhouetteWidth(forHeight height: CGFloat) -> CGFloat {
+        height * canonicalAspectRatio
     }
 
     /// Reserved outside the physical display edge so the closing edge never
@@ -38,12 +47,56 @@ enum SideNotchLayout {
     }
 }
 
-/// One continuous edge-docked silhouette.
-///
-/// The free-facing edge uses two cubic Bezier segments at the top and two
-/// mirrored segments at the bottom. The middle ~59% is intentionally straight,
-/// which prevents the shape from reading as a capsule. The screen-facing edge
-/// is pushed outside the display by `SideNotchLayout.edgeBleed`.
+private struct CanonicalCubicSegment {
+    let control1: CGPoint
+    let control2: CGPoint
+    let end: CGPoint
+}
+
+/// Exact platform-native transcription of `Resources/Shapes/caliph-edge-tab.svg`.
+/// Keep these coordinates in lockstep with the canonical asset; do not simplify
+/// or regenerate them from a screenshot.
+private enum CanonicalEdgeTab {
+    static let width: CGFloat = 210
+    static let height: CGFloat = 1138
+    static let straightEdgeBottom = CGPoint(x: 0, y: 904)
+
+    static let topSegments: [CanonicalCubicSegment] = [
+        .init(control1: .init(x: 210, y: 6), control2: .init(x: 209.7, y: 12), end: .init(x: 208.4, y: 18)),
+        .init(control1: .init(x: 207.1, y: 24), control2: .init(x: 205.2, y: 30), end: .init(x: 202.9, y: 36)),
+        .init(control1: .init(x: 200.6, y: 42), control2: .init(x: 198, y: 48), end: .init(x: 194.8, y: 54)),
+        .init(control1: .init(x: 191.6, y: 60), control2: .init(x: 188.1, y: 66), end: .init(x: 184.1, y: 72)),
+        .init(control1: .init(x: 180.1, y: 78), control2: .init(x: 175.8, y: 84), end: .init(x: 170.9, y: 90)),
+        .init(control1: .init(x: 166, y: 96), control2: .init(x: 160.1, y: 102), end: .init(x: 152.5, y: 108)),
+        .init(control1: .init(x: 144.9, y: 114), control2: .init(x: 135.4, y: 120), end: .init(x: 122.4, y: 126)),
+        .init(control1: .init(x: 109.4, y: 132), control2: .init(x: 81.5, y: 138), end: .init(x: 68.4, y: 144)),
+        .init(control1: .init(x: 55.3, y: 150), control2: .init(x: 47.8, y: 156), end: .init(x: 40.8, y: 162)),
+        .init(control1: .init(x: 33.8, y: 168), control2: .init(x: 28.2, y: 174), end: .init(x: 23.1, y: 180)),
+        .init(control1: .init(x: 18, y: 186), control2: .init(x: 13.9, y: 192), end: .init(x: 10.6, y: 198)),
+        .init(control1: .init(x: 7.3, y: 204), control2: .init(x: 5.1, y: 210), end: .init(x: 3.6, y: 216)),
+        .init(control1: .init(x: 2.1, y: 222), control2: .init(x: 1.2, y: 228), end: .init(x: 0.6, y: 234)),
+    ]
+
+    static let bottomSegments: [CanonicalCubicSegment] = [
+        .init(control1: .init(x: 1.2, y: 910), control2: .init(x: 2.1, y: 916), end: .init(x: 3.6, y: 922)),
+        .init(control1: .init(x: 5.1, y: 928), control2: .init(x: 7.3, y: 934), end: .init(x: 10.6, y: 940)),
+        .init(control1: .init(x: 13.9, y: 946), control2: .init(x: 18, y: 952), end: .init(x: 23.1, y: 958)),
+        .init(control1: .init(x: 28.2, y: 964), control2: .init(x: 33.8, y: 970), end: .init(x: 40.8, y: 976)),
+        .init(control1: .init(x: 47.8, y: 982), control2: .init(x: 55.3, y: 988), end: .init(x: 68.4, y: 994)),
+        .init(control1: .init(x: 81.5, y: 1000), control2: .init(x: 109.4, y: 1006), end: .init(x: 122.4, y: 1012)),
+        .init(control1: .init(x: 135.4, y: 1018), control2: .init(x: 144.9, y: 1024), end: .init(x: 152.5, y: 1030)),
+        .init(control1: .init(x: 160.1, y: 1036), control2: .init(x: 166, y: 1042), end: .init(x: 170.9, y: 1048)),
+        .init(control1: .init(x: 175.8, y: 1054), control2: .init(x: 180.1, y: 1060), end: .init(x: 184.1, y: 1066)),
+        .init(control1: .init(x: 188.1, y: 1072), control2: .init(x: 191.6, y: 1078), end: .init(x: 194.8, y: 1084)),
+        .init(control1: .init(x: 198, y: 1090), control2: .init(x: 200.6, y: 1096), end: .init(x: 202.9, y: 1102)),
+        .init(control1: .init(x: 205.2, y: 1108), control2: .init(x: 207.1, y: 1114), end: .init(x: 208.4, y: 1120)),
+        .init(control1: .init(x: 209.7, y: 1126), control2: .init(x: 210, y: 1132), end: .init(x: 210, y: 1138)),
+    ]
+}
+
+/// One continuous, edge-docked silhouette. The on-screen curve is the exact
+/// canonical SVG at a uniform scale. Only the closing edge is extended into the
+/// six-point off-screen strip so AppKit antialiasing cannot reveal a seam.
 struct EdgePillShape: Shape {
     let side: EdgeSide
 
@@ -65,49 +118,36 @@ struct EdgePillShape: Shape {
     }
 
     private func rightDockedPath(in rect: CGRect) -> Path {
+        let scale = rect.height / CanonicalEdgeTab.height
         let visibleMaxX = rect.maxX - SideNotchLayout.edgeBleed
-        let visibleWidth = max(0, visibleMaxX - rect.minX)
-        let transitionFraction: CGFloat = rect.height > 300 ? 0.12 : 0.18
+        let visibleMinX = visibleMaxX - CanonicalEdgeTab.width * scale
 
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        func point(_ canonical: CGPoint) -> CGPoint {
             CGPoint(
-                x: rect.minX + visibleWidth * x,
-                y: rect.minY + rect.height * y
+                x: visibleMinX + canonical.x * scale,
+                y: rect.minY + canonical.y * scale
             )
         }
 
         var path = Path()
+        path.move(to: point(.init(x: CanonicalEdgeTab.width, y: 0)))
+        for segment in CanonicalEdgeTab.topSegments {
+            path.addCurve(
+                to: point(segment.end),
+                control1: point(segment.control1),
+                control2: point(segment.control2)
+            )
+        }
 
-        // Top transition: screen edge -> concave fillet -> shoulder -> vertical body.
-        path.move(to: p(1.000, 0.000))
-        path.addCurve(
-            to: p(0.680, transitionFraction * 0.53),
-            control1: p(1.000, transitionFraction * 0.27),
-            control2: p(0.965, transitionFraction * 0.48)
-        )
-        path.addCurve(
-            to: p(0.000, transitionFraction),
-            // The first handle continues the shoulder tangent while the last
-            // two handles share the vertical edge. This lets curvature decay
-            // to zero before the path becomes a straight line.
-            control1: p(0.000, transitionFraction * 0.65),
-            control2: p(0.000, transitionFraction * 0.82)
-        )
+        path.addLine(to: point(CanonicalEdgeTab.straightEdgeBottom))
 
-        // Long straight free edge.
-        path.addLine(to: p(0.000, 1 - transitionFraction))
-
-        // Bottom transition: exact vertical mirror of the top geometry.
-        path.addCurve(
-            to: p(0.680, 1 - transitionFraction * 0.53),
-            control1: p(0.000, 1 - transitionFraction * 0.82),
-            control2: p(0.000, 1 - transitionFraction * 0.65)
-        )
-        path.addCurve(
-            to: p(1.000, 1.000),
-            control1: p(0.965, 1 - transitionFraction * 0.48),
-            control2: p(1.000, 1 - transitionFraction * 0.27)
-        )
+        for segment in CanonicalEdgeTab.bottomSegments {
+            path.addCurve(
+                to: point(segment.end),
+                control1: point(segment.control1),
+                control2: point(segment.control2)
+            )
+        }
 
         // Fill the reserved off-screen strip without moving the visible curve endpoint.
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
