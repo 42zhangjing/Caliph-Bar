@@ -2,26 +2,47 @@ import SwiftUI
 import AppKit
 
 enum StatusColor {
-    /// Color based on remaining fraction (0.0 ... 1.0)
-    /// High remaining is green, medium is yellow, low remaining is red.
-    static func color(for remainingFraction: Double) -> Color {
-        if remainingFraction < 0.20 {
-            return Color(red: 1.0, green: 0.30, blue: 0.12) // Red / Alert
-        } else if remainingFraction < 0.50 {
-            return Color(red: 0.98, green: 0.82, blue: 0.18) // Yellow / Caution
-        } else {
-            return Color(red: 0.18, green: 0.88, blue: 0.55) // Green / Healthy
+    private struct Swatch {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        var color: Color {
+            Color(red: red, green: green, blue: blue)
         }
+
+        var nsColor: NSColor {
+            NSColor(
+                calibratedRed: CGFloat(red),
+                green: CGFloat(green),
+                blue: CGFloat(blue),
+                alpha: 1
+            )
+        }
+    }
+
+    private static let alert = Swatch(red: 0.78, green: 0.41, blue: 0.35)
+    private static let caution = Swatch(red: 0.78, green: 0.63, blue: 0.36)
+    private static let healthy = Swatch(red: 0.39, green: 0.72, blue: 0.62)
+
+    /// Color based on remaining fraction (0.0 ... 1.0)
+    /// Muted instrument colors keep quota state legible without competing with
+    /// the provider brand marks on black surfaces.
+    static func color(for remainingFraction: Double) -> Color {
+        swatch(for: remainingFraction).color
     }
 
     static func nsColor(for remainingFraction: Double) -> NSColor {
+        swatch(for: remainingFraction).nsColor
+    }
+
+    private static func swatch(for remainingFraction: Double) -> Swatch {
         if remainingFraction < 0.20 {
-            return .systemRed
+            return alert
         } else if remainingFraction < 0.50 {
-            return .systemYellow
+            return caution
         } else {
-            return .systemGreen
+            return healthy
         }
     }
 }
-

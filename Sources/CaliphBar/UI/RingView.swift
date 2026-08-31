@@ -12,17 +12,17 @@ struct RingView: View {
         ZStack {
             Circle()
                 .fill(Color(red: 0.020, green: 0.021, blue: 0.026))
-                .padding(5.5)
+                .padding(4.5)
 
             Circle()
-                .stroke(Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.24), lineWidth: 3.5)
+                .stroke(Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.24), lineWidth: 3)
 
             if remainingFraction != nil {
                 Circle()
                     .trim(from: 0, to: min(1, max(0.015, displayedFraction)))
                     .stroke(
                         StatusColor.color(for: displayedFraction),
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
             }

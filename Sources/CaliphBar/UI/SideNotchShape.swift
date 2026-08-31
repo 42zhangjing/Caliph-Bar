@@ -13,8 +13,8 @@ enum SideNotchLayout {
     static let collapsedHeight: CGFloat = 76
     static let itemSize = CGSize(width: 48, height: 56)
     static let itemSpacing: CGFloat = 8
-    static let ringSize: CGFloat = 39
-    static let percentageFontSize: CGFloat = 10.5
+    static let ringSize: CGFloat = 32
+    static let percentageFontSize: CGFloat = 10
 
     /// The canonical silhouette is stored in `Resources/Shapes/caliph-edge-tab.svg`.
     /// Width is always derived from height so no view state can stretch the curve.

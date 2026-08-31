@@ -24,7 +24,6 @@ struct PillItemButtonStyle: ButtonStyle {
 
 struct FloatingPillView: View {
     @ObservedObject var store: UsageStore
-    @ObservedObject var selection: SelectionModel
     @ObservedObject var position: PillPositionModel
 
     private var isExpanded: Bool {
@@ -107,9 +106,6 @@ struct FloatingPillView: View {
                     provider: provider,
                     snapshot: store.item(for: provider),
                     action: {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            selection.selected = provider
-                        }
                         position.onProviderTapped?(provider)
                     }
                 )
@@ -140,12 +136,12 @@ private struct RadarPillButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 3.5)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 3)
                     Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(CodexRadarPresentation.brandColor)
                 }
                 .frame(width: SideNotchLayout.ringSize, height: SideNotchLayout.ringSize)
@@ -190,35 +186,22 @@ private struct ProviderPillButton: View {
     var body: some View {
         let remaining = snapshot?.headlineRemainingFraction
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 RingView(provider: provider, remainingFraction: remaining, size: SideNotchLayout.ringSize)
 
                 if let remaining {
                     let percent = Int((remaining * 100).rounded())
-                    HStack(spacing: 4) {
-                        Text("\(percent)%")
-                            .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(StatusColor.color(for: remaining))
-                            .animation(.easeOut(duration: 0.18), value: remaining)
-
-                        if provider == .codex {
-                            Circle()
-                                .fill(radarColor)
-                                .frame(width: 5, height: 5)
-                                .help(radarHelp)
-                        }
-                    }
+                    Text("\(percent)%")
+                        .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(StatusColor.color(for: remaining))
+                        .animation(.easeOut(duration: 0.18), value: remaining)
                 }
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
         }
         .buttonStyle(PillItemButtonStyle())
         .help(provider == .codex ? "\(provider.displayName) · \(radarHelp)" : provider.displayName)
-    }
-
-    private var radarColor: Color {
-        CodexRadarPresentation.statusColor(for: radar.signal)
     }
 
     private var radarHelp: String {

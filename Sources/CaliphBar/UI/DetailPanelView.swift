@@ -100,6 +100,10 @@ struct SideDetailPanelView: View {
     @ObservedObject private var l10n = L10n.shared
     private let backgroundColor = Color(red: 0.025, green: 0.026, blue: 0.030)
 
+    private var previewProvider: ProviderID {
+        selection.sidePreview ?? selection.selected
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             if side == .left {
@@ -107,7 +111,7 @@ struct SideDetailPanelView: View {
             }
 
             ZStack(alignment: .topLeading) {
-                if let item = store.item(for: selection.selected) {
+                if let item = store.item(for: previewProvider) {
                     providerContent(item)
                         .id(item.provider)
                         .transition(
@@ -143,7 +147,7 @@ struct SideDetailPanelView: View {
         .compositingGroup()
         .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
         .padding(SideDetailPanelLayout.shadowPadding)
-        .animation(.easeOut(duration: 0.16), value: selection.selected)
+        .animation(.easeOut(duration: 0.16), value: previewProvider)
     }
 
     private func providerContent(_ item: ProviderSnapshot) -> some View {
@@ -547,7 +551,7 @@ struct DetailPanelView: View {
             ForEach(ProviderID.allCases, id: \.self) { provider in
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) {
-                        selection.selected = provider
+                        selection.selectFromMenu(provider)
                     }
                 } label: {
                     HStack(spacing: 6) {
