@@ -164,11 +164,13 @@ struct SettingsView: View {
                 .foregroundStyle(selected ? .white : .white.opacity(0.52))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, minHeight: 34)
+                .contentShape(Rectangle())
                 .background(Capsule().fill(selected ? Color.white.opacity(0.14) : .clear))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     private var claudeRepairRow: some View {

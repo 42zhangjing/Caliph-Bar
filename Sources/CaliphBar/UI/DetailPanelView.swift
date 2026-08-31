@@ -8,7 +8,7 @@ enum SideDetailPanelLayout {
     // account-truth quota lanes without making the panel resize while hovering providers.
     // Four Antigravity lanes need a real bottom safety area; the edge rail itself stays compact.
     static let cardHeight: CGFloat = 228
-    static let pointerLength: CGFloat = 34
+    static let pointerLength: CGFloat = 28
     static let shadowPadding: CGFloat = 16
 
     static var contentSize: CGSize {
@@ -36,9 +36,9 @@ private struct IntegratedPointerPanelShape: Shape {
         let radius = min(16, rect.height / 2)
         let bodyMaxX = rect.maxX - pointerLength
         let midY = rect.midY
-        let transitionHalfHeight = min(34, rect.height * 0.30)
-        let pointerBaseHalfHeight = min(13, rect.height * 0.16)
-        let shoulderReach = min(8, pointerLength * 0.24)
+        let transitionHalfHeight = min(28, rect.height * 0.24)
+        let pointerBaseHalfHeight = min(10, rect.height * 0.12)
+        let shoulderReach = min(6, pointerLength * 0.22)
 
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
@@ -57,11 +57,11 @@ private struct IntegratedPointerPanelShape: Shape {
         path.addCurve(
             to: CGPoint(x: rect.maxX, y: midY),
             control1: CGPoint(x: bodyMaxX + shoulderReach * 0.78, y: midY - pointerBaseHalfHeight * 0.92),
-            control2: CGPoint(x: rect.maxX - pointerLength * 0.34, y: midY - 5)
+            control2: CGPoint(x: rect.maxX - pointerLength * 0.34, y: midY - 3.5)
         )
         path.addCurve(
             to: CGPoint(x: bodyMaxX + shoulderReach, y: midY + pointerBaseHalfHeight),
-            control1: CGPoint(x: rect.maxX - pointerLength * 0.34, y: midY + 5),
+            control1: CGPoint(x: rect.maxX - pointerLength * 0.34, y: midY + 3.5),
             control2: CGPoint(x: bodyMaxX + shoulderReach * 0.78, y: midY + pointerBaseHalfHeight * 0.92)
         )
         path.addCurve(
@@ -246,6 +246,7 @@ private struct CompactUsageBar: View {
                 if let reset = window.resetsAt {
                     Text(l10n.resetsText(at: reset))
                         .font(.system(size: 9))
+                        .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.34))
                 }
             }
@@ -267,7 +268,8 @@ private struct CompactUsageBar: View {
             .frame(height: 4)
 
             Text(l10n.remainingPercentText(Int((window.remainingFraction * 100).rounded())))
-                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(StatusColor.color(for: window.remainingFraction))
         }
     }
@@ -286,7 +288,7 @@ struct SideRadarPanelView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(signalColor)
+                        .foregroundStyle(CodexRadarPresentation.brandColor)
                     Text("RESET RADAR")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
@@ -310,11 +312,18 @@ struct SideRadarPanelView: View {
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.56))
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 0)
-                Text(l10n.isChinese ? "数据来自 Codex 雷达 · 不影响账户额度" : "Data from Codex Radar · separate from account quota")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.32))
+                HStack(spacing: 8) {
+                    Text(l10n.isChinese ? "数据来自 Codex 雷达 · 不影响账户额度" : "Codex Radar · separate from account quota")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.32))
+                    Spacer(minLength: 4)
+                    Link(l10n.isChinese ? "查看完整" : "View full", destination: sourceURL)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.58))
+                }
             }
             .padding(14)
             .frame(width: SideDetailPanelLayout.cardWidth, height: SideDetailPanelLayout.cardHeight, alignment: .topLeading)
@@ -339,7 +348,8 @@ struct SideRadarPanelView: View {
                 .font(.system(size: 9, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.38))
             Text(value.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.88))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -348,26 +358,23 @@ struct SideRadarPanelView: View {
     }
 
     private var signalColor: Color {
-        switch radar.signal {
-        case .hot: return .red
-        case .watch: return .yellow
-        case .quiet: return .green
-        case .stale, .offline: return .white.opacity(0.42)
-        }
+        CodexRadarPresentation.statusColor(for: radar.signal)
     }
 
     private var signalLabel: String {
-        switch radar.signal {
-        case .hot: return "HOT"
-        case .watch: return "WATCH"
-        case .quiet: return "QUIET"
-        case .stale: return "STALE"
-        case .offline: return "OFFLINE"
-        }
+        CodexRadarPresentation.statusLabel(
+            for: radar.signal,
+            isChinese: l10n.isChinese,
+            compact: true
+        )
     }
 
     private var detailText: String {
-        radar.snapshot?.summary ?? radar.snapshot?.message ?? (l10n.isChinese ? "等待公共重置情报" : "Waiting for public reset intelligence")
+        CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+    }
+
+    private var sourceURL: URL {
+        URL(string: "https://codexradar.com/")!
     }
 }
 

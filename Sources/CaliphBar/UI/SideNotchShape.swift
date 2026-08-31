@@ -7,20 +7,27 @@ enum EdgeSide: String, Codable, Equatable {
 }
 
 enum SideNotchLayout {
-    static let windowSize = CGSize(width: 62, height: 288)
+    static let visibleWidth: CGFloat = 62
+    static let compactWindowSize = CGSize(width: visibleWidth + edgeBleed, height: 288)
+    static let radarWindowSize = CGSize(width: visibleWidth + edgeBleed, height: 328)
     static let itemSize = CGSize(width: 48, height: 56)
     static let itemSpacing: CGFloat = 8
     static let ringSize: CGFloat = 39
     static let percentageFontSize: CGFloat = 10.5
 
-    /// Extends the panel slightly beyond the physical display edge so the
-    /// closing edge of the shape is never visible as a separate black bar.
+    static func windowSize(radarPinned: Bool) -> CGSize {
+        radarPinned ? radarWindowSize : compactWindowSize
+    }
+
+    /// Reserved outside the physical display edge so the closing edge never
+    /// appears as a separate black bar. Shape/content geometry uses the visible
+    /// 62-point region; the bleed is not allowed to clip the visible curves.
     static let edgeBleed: CGFloat = 6
 
     static func providerCenterYFromTop(
         index: Int,
         providerCount: Int,
-        height: CGFloat = windowSize.height
+        height: CGFloat = compactWindowSize.height
     ) -> CGFloat {
         let count = max(1, providerCount)
         let stackHeight = CGFloat(count) * itemSize.height
@@ -58,9 +65,13 @@ struct EdgePillShape: Shape {
     }
 
     private func rightDockedPath(in rect: CGRect) -> Path {
+        let visibleMaxX = rect.maxX - SideNotchLayout.edgeBleed
+        let visibleWidth = max(0, visibleMaxX - rect.minX)
+        let transitionFraction: CGFloat = rect.height > 300 ? 0.12 : 0.18
+
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(
-                x: rect.minX + rect.width * x,
+                x: rect.minX + visibleWidth * x,
                 y: rect.minY + rect.height * y
             )
         }
@@ -70,32 +81,34 @@ struct EdgePillShape: Shape {
         // Top transition: screen edge -> concave fillet -> shoulder -> vertical body.
         path.move(to: p(1.000, 0.000))
         path.addCurve(
-            to: p(0.680, 0.108),
-            control1: p(1.000, 0.056),
-            control2: p(0.965, 0.098)
+            to: p(0.680, transitionFraction * 0.53),
+            control1: p(1.000, transitionFraction * 0.27),
+            control2: p(0.965, transitionFraction * 0.48)
         )
         path.addCurve(
-            to: p(0.000, 0.205),
-            control1: p(0.400, 0.124),
-            control2: p(0.000, 0.146)
+            to: p(0.000, transitionFraction),
+            control1: p(0.400, transitionFraction * 0.61),
+            control2: p(0.000, transitionFraction * 0.72)
         )
 
         // Long straight free edge.
-        path.addLine(to: p(0.000, 0.795))
+        path.addLine(to: p(0.000, 1 - transitionFraction))
 
         // Bottom transition: exact vertical mirror of the top geometry.
         path.addCurve(
-            to: p(0.680, 0.892),
-            control1: p(0.000, 0.854),
-            control2: p(0.400, 0.876)
+            to: p(0.680, 1 - transitionFraction * 0.53),
+            control1: p(0.000, 1 - transitionFraction * 0.72),
+            control2: p(0.400, 1 - transitionFraction * 0.61)
         )
         path.addCurve(
             to: p(1.000, 1.000),
-            control1: p(0.965, 0.902),
-            control2: p(1.000, 0.944)
+            control1: p(0.965, 1 - transitionFraction * 0.48),
+            control2: p(1.000, 1 - transitionFraction * 0.27)
         )
 
-        // The closing screen-facing edge is intentionally hidden off-screen.
+        // Fill the reserved off-screen strip without moving the visible curve endpoint.
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         path.closeSubpath()
         return path
     }

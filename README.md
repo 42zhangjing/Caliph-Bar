@@ -11,7 +11,7 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 
 ## UI and interaction
 
-- smaller draggable floating edge pill with provider rings; the default three-row rail is `62 × 288` points
+- smaller draggable floating edge pill with provider rings; the default three-row rail is `62 × 288` points and the optional four-row Radar layout is `62 × 328`
 - continuous custom Bezier silhouette that docks flush to the physical left/right display edge
 - remembers vertical position and dock side
 - optional hover-to-expand mode
@@ -122,7 +122,7 @@ Codex Radar is not an account provider. The current personal build polls the pub
 https://codexradar.com/current.json
 ```
 
-on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Public Radar status/probability may create a `QUIET`, `WATCH`, `HOT`, `STALE`, or `OFFLINE` signal, but it never modifies the user's real Codex percentage or normal reset timestamp.
+on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Internally, public Radar status/probability may create a `quiet`, `watch`, `hot`, `stale`, or `offline` signal, but the UI presents these as unambiguous phrases such as `NO RESET SIGNAL` / `暂无重置信号`. Radar probability uses neutral styling and never modifies or visually impersonates the user's real Codex percentage or normal reset timestamp.
 
 If CaliphBar observes a large real quota jump across a reset boundary, it can record a small local confirmation event and correlate it with Radar state. Only percentage/reset metadata is retained locally; it is never uploaded to Codex Radar.
 

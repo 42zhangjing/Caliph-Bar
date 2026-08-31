@@ -43,8 +43,8 @@ final class FloatingPillWindow: NSObject {
             contentRect: NSRect(
                 x: 0,
                 y: 0,
-                width: SideNotchLayout.windowSize.width,
-                height: SideNotchLayout.windowSize.height
+                width: SideNotchLayout.compactWindowSize.width,
+                height: SideNotchLayout.compactWindowSize.height
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -101,6 +101,20 @@ final class FloatingPillWindow: NSObject {
             }
             .store(in: &cancellables)
 
+        store.$radarPinned
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let centerY = self.panel.frame.midY
+                UserDefaults.standard.set(centerY - self.windowSize.height / 2, forKey: Keys.originY)
+                self.lastHoveredProvider = nil
+                self.radarWasHovered = false
+                self.updateWindowFrame(animated: true)
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: .caliphBarCenterPill)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.centerOnCurrentScreen() }
@@ -133,10 +147,10 @@ final class FloatingPillWindow: NSObject {
         panel.orderOut(nil)
     }
 
-    private let windowSize = NSSize(
-        width: SideNotchLayout.windowSize.width,
-        height: SideNotchLayout.windowSize.height
-    )
+    private var windowSize: NSSize {
+        let size = SideNotchLayout.windowSize(radarPinned: store.radarPinned)
+        return NSSize(width: size.width, height: size.height)
+    }
 
     private func updateWindowFrame(animated: Bool) {
         guard let screen = screenContainingPanel() ?? NSScreen.main else { return }
@@ -184,7 +198,8 @@ final class FloatingPillWindow: NSObject {
 
         let centerFromTop = SideNotchLayout.providerCenterYFromTop(
             index: index,
-            providerCount: moduleCount
+            providerCount: moduleCount,
+            height: windowSize.height
         )
         let centerY = panel.frame.maxY - centerFromTop
         let anchor = NSRect(
@@ -210,7 +225,8 @@ final class FloatingPillWindow: NSObject {
 
         let centerFromTop = SideNotchLayout.providerCenterYFromTop(
             index: ProviderID.allCases.count,
-            providerCount: moduleCount
+            providerCount: moduleCount,
+            height: windowSize.height
         )
         let centerY = panel.frame.maxY - centerFromTop
         let anchor = NSRect(
@@ -377,7 +393,8 @@ final class FloatingPillWindow: NSObject {
         for (index, provider) in providers.enumerated() {
             let centerY = SideNotchLayout.providerCenterYFromTop(
                 index: index,
-                providerCount: moduleCount
+                providerCount: moduleCount,
+                height: windowSize.height
             )
             let distance = abs(localYFromTop - centerY)
             if best == nil || distance < best!.distance {
@@ -395,7 +412,8 @@ final class FloatingPillWindow: NSObject {
         let localYFromTop = panel.frame.maxY - point.y
         let centerY = SideNotchLayout.providerCenterYFromTop(
             index: ProviderID.allCases.count,
-            providerCount: moduleCount
+            providerCount: moduleCount,
+            height: windowSize.height
         )
         let activationRadius = (SideNotchLayout.itemSize.height + SideNotchLayout.itemSpacing) / 2
         return abs(localYFromTop - centerY) <= activationRadius

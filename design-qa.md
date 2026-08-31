@@ -27,6 +27,7 @@ This document records the durable design constraints for the floating edge pill 
 - The full panel and side panel are distinct panel modes and must rebuild their root view when the mode changes.
 - Settings must remain reachable from the full panel through the gear button.
 - Provider tabs use equal widths and a shared selected highlight.
+- Provider tabs expose a full-height hit target and hover feedback; the visible segment and clickable area must match.
 - Settings controls share one aligned right-hand control column.
 - Provider/settings switching keeps a stable panel footprint to avoid visible size jumps.
 - The Codex full panel must visibly include the independent `RESET RADAR` detail strip even when Codex account quota is unavailable; public intelligence and account truth fail independently.
@@ -46,6 +47,8 @@ This document records the durable design constraints for the floating edge pill 
 - Claude may show live, stale, estimated, or unavailable state according to its provider fallback rules.
 - Antigravity uses real local quota-summary data when available; it is not a simulated Gemini placeholder.
 - Public intelligence such as Codex Radar must remain visually separate from real account quota. A Radar signal may annotate Codex but must not alter the user's local percentage or reset timestamp.
+- Radar probabilities are neutral information, not account health. Do not apply the account-quota red/yellow/green ring thresholds to Radar percentages; reserve yellow/red Radar accents for watch/strong signals.
+- User-facing Radar states must be explicit (`暂无重置信号`, `值得关注`, `强重置信号`, `数据超2小时未更新`, `情报离线`) rather than ambiguous labels such as `QUIET` or `情报已过期`.
 - `LOCAL RESET CONFIRMATION` is a correlation label: show it only when a fresh local Codex quota jump is paired with an active public Radar `WATCH` or `HOT` signal.
 
 ## Verification gates
@@ -64,7 +67,7 @@ CI does **not** prove visual quality or interaction feel. After material UI chan
 3. Claude → Codex → Antigravity hover sweep; side-card size must remain unchanged
 4. when Codex returns model-specific buckets, verify all four quota rows are readable and correctly labeled
 5. confirm the compact Codex side card shows the Radar badge without crowding the LIVE/STALE indicator
-6. confirm the full Codex panel visibly shows `RESET RADAR` with QUIET/WATCH/HOT/STALE/OFFLINE as appropriate
+6. confirm the full Codex panel visibly shows `RESET RADAR` with an explicit localized state; quiet state must read `暂无重置信号` / `NO RESET SIGNAL`, not `QUIET`
 7. confirm Radar remains visible/independent when Codex account truth is unavailable
 8. side card → pill pointer movement without collapse
 9. menu-bar panel → Settings → back; footprint must remain stable
@@ -81,14 +84,17 @@ A UI change is considered complete only after both CI and this local interaction
 - Implemented full Codex panel: `docs/design-qa/instrument-console-codex.png`
 - Implemented settings: `docs/design-qa/instrument-console-settings.png`
 - Implemented four-lane side detail: `docs/design-qa/instrument-console-side-antigravity.png`
+- Implemented four-item edge rail with reserved bleed: `docs/design-qa/instrument-console-edge-radar.png`
 
 Comparison history:
 
 1. The selected Instrument Console hierarchy was retained: toolbar, equal-width provider selector, Account Truth, and a separate Public Intelligence surface.
-2. The generated reference's large permanent rail was intentionally rejected. The production edge rail remains a compact three-ring monitor and was reduced from `74 × 344` to `62 × 288`; its ring diameter is now 39 points.
+2. The generated reference's large permanent rail was intentionally rejected. The production edge rail remains a compact three-ring monitor and was reduced from `74 × 344` to a visible `62 × 288`; its ring diameter is now 39 points. Enabling the optional fourth Radar module expands visible height only to `62 × 328`. Its curve begins after the 40-point content safety zone, while a separate 6-point off-screen bleed prevents seams without clipping the visible top/bottom endpoints.
 3. Settings replaced low-contrast menu pickers and ambiguous white switches with visible segmented controls and explicit ON/OFF labels. Simplified Chinese, English, and Follow System were exercised in the running app.
 4. Antigravity now exposes Gemini 5-hour/weekly and Claude/GPT 5-hour/weekly. The fixed hover card grew from 204 to 228 points only after the four-lane screenshot revealed inadequate bottom safety space.
 5. Optional Radar pinning adds a fourth compact rail module; disabled remains the default, preserving the small three-row footprint and Codex's tiny Radar status dot.
 6. Right and left docking, center reset, auto-collapse handle, provider hover, Radar independence, progressive refresh, and real local Codex app-server data were exercised in the built macOS app.
+7. The provider selector and settings segments now use full-size hit regions with hover/press feedback. Numeric quota and probability labels use system monospaced digits to prevent horizontal jitter.
+8. Radar probabilities now use a neutral ring/value treatment; only watch/strong states introduce yellow/red urgency. Constrained Radar copy is authored as complete sentences with a `查看完整` link, and the integrated pointer was narrowed for a cleaner silhouette.
 
 Final result: passed.

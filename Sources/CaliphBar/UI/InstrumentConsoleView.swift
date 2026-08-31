@@ -9,6 +9,7 @@ struct InstrumentConsoleView: View {
     @ObservedObject private var radar = CodexRadarStore.shared
 
     @State private var showSettings = false
+    @State private var hoveredProvider: ProviderID?
     @Namespace private var tabNamespace
 
     private let width: CGFloat = 458
@@ -121,10 +122,11 @@ struct InstrumentConsoleView: View {
                 }
 
                 if let note = item.note, item.source != .live {
-                    Text(note)
+                    Text(localizedNote(for: item))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.white.opacity(0.44))
                         .lineLimit(2)
+                        .help(note)
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 160)
@@ -162,17 +164,24 @@ struct InstrumentConsoleView: View {
                             .lineLimit(1)
                     }
                     .foregroundStyle(selection.selected == provider ? .white : .white.opacity(0.44))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .contentShape(Rectangle())
                     .background {
                         if selection.selected == provider {
                             Capsule()
                                 .fill(Color.white.opacity(0.13))
                                 .matchedGeometryEffect(id: "instrument-tab", in: tabNamespace)
+                        } else if hoveredProvider == provider {
+                            Capsule().fill(Color.white.opacity(0.055))
                         }
                     }
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    hoveredProvider = hovering ? provider : nil
+                }
             }
         }
         .padding(4)
@@ -194,10 +203,11 @@ struct InstrumentConsoleView: View {
                             .foregroundStyle(.white.opacity(0.45))
                     }
                 }
-                Text(item.sourceDetail)
+                Text(localizedSourceDetail(for: item))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.36))
                     .lineLimit(1)
+                    .help(item.sourceDetail)
             }
             Spacer()
             sourceBadge(item.source)
@@ -266,26 +276,29 @@ struct InstrumentConsoleView: View {
     private func localizedNote(for item: ProviderSnapshot) -> String {
         if item.provider == .gemini { return l10n.geminiUnimplemented }
         if item.provider == .claude && item.source == .unavailable { return l10n.claudeNotFoundHelp }
+        if item.source == .stale {
+            return l10n.isChinese
+                ? "实时读取暂不可用，正在显示本机的旧数据。"
+                : "Live reading is unavailable; showing older local data."
+        }
         return item.note ?? l10n.usageUnavailable
     }
 
-    private var radarColor: Color {
-        switch radar.signal {
-        case .hot: return .red
-        case .watch: return .yellow
-        case .quiet: return .green
-        case .stale, .offline: return .white.opacity(0.42)
+    private func localizedSourceDetail(for item: ProviderSnapshot) -> String {
+        switch item.source {
+        case .live: return l10n.isChinese ? "本机实时数据" : "Live local data"
+        case .estimated: return l10n.isChinese ? "本机估算数据" : "Local estimated data"
+        case .stale: return l10n.isChinese ? "本机旧数据回退" : "Older local fallback"
+        case .unavailable: return l10n.isChinese ? "数据源不可用" : "Source unavailable"
         }
     }
 
+    private var radarColor: Color {
+        CodexRadarPresentation.statusColor(for: radar.signal)
+    }
+
     private var radarSourceState: String {
-        switch radar.signal {
-        case .hot: return "HOT"
-        case .watch: return "WATCH"
-        case .quiet: return "QUIET"
-        case .stale: return "STALE"
-        case .offline: return "OFFLINE"
-        }
+        CodexRadarPresentation.statusLabel(for: radar.signal, isChinese: l10n.isChinese)
     }
 }
 
@@ -295,7 +308,8 @@ private struct ConsoleIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: .semibold))
-            .frame(width: 30, height: 30)
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
             .background(Circle().fill(active ? Color.white.opacity(0.10) : Color.white.opacity(configuration.isPressed ? 0.10 : 0.025)))
             .overlay(Circle().stroke(Color.white.opacity(active ? 0.12 : 0.04), lineWidth: 0.7))
             .scaleEffect(configuration.isPressed ? 0.93 : 1)
