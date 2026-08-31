@@ -5,7 +5,12 @@ public struct CodexProvider: UsageProvider {
     private let rpc = CodexAppServerProbe()
     private let reader = CodexRolloutReader()
 
-    public init() {}
+    public init() {
+        // Menu-bar apps often do not inherit the shell PATH that contains `codex`.
+        // If ChatGPT/Codex desktop bundles the official executable, expose that exact
+        // local binary to the existing app-server probe without touching user auth.
+        CodexBundledCLIEnvironment.installOverrideIfNeeded()
+    }
 
     public func fetch(context _: ProviderFetchContext) async -> ProviderFetchResult {
         do {
