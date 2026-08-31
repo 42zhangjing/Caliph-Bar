@@ -17,17 +17,53 @@ import Testing
         let json = #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1788200000},"secondary":{"usedPercent":60,"windowDurationMins":10080,"resetsAt":1788600000},"planType":"plus"}}}"#
         let parsed = CodexAppServerRateLimitParser.parse(data: Data(json.utf8))
         #expect(parsed?.primaryPercent == 0)
+        #expect(parsed?.primaryWindowMinutes == 300)
         #expect(parsed?.secondaryPercent == 60)
+        #expect(parsed?.secondaryWindowMinutes == 10_080)
         #expect(parsed?.planType == "plus")
         #expect(parsed?.primaryResetsAt != nil)
     }
 
     @Test func parsesLiveAppServerSnakeCasePayload() throws {
-        let json = #"{"id":2,"result":{"rate_limits":{"primary":{"used_percent":12.5,"resets_at":1788200000},"secondary":{"used_percent":35,"resets_at":1788600000},"plan_type":"pro"}}}"#
+        let json = #"{"id":2,"result":{"rate_limits":{"primary":{"used_percent":12.5,"window_duration_mins":300,"resets_at":1788200000},"secondary":{"used_percent":35,"window_duration_mins":10080,"resets_at":1788600000},"plan_type":"pro"}}}"#
         let parsed = CodexAppServerRateLimitParser.parse(data: Data(json.utf8))
         #expect(parsed?.primaryPercent == 12.5)
+        #expect(parsed?.primaryWindowMinutes == 300)
         #expect(parsed?.secondaryPercent == 35)
+        #expect(parsed?.secondaryWindowMinutes == 10_080)
         #expect(parsed?.planType == "pro")
+    }
+
+    @Test func mapsFiveHourAndWeeklyByDurationEvenWhenSlotsAreSwapped() {
+        let limits = CodexRateLimits(
+            primaryPercent: 60,
+            primaryResetsAt: Date(timeIntervalSince1970: 1_788_600_000),
+            primaryWindowMinutes: 10_080,
+            secondaryPercent: 0,
+            secondaryResetsAt: Date(timeIntervalSince1970: 1_788_200_000),
+            secondaryWindowMinutes: 300,
+            planType: "plus"
+        )
+
+        let windows = CodexProvider.normalizedWindows(from: limits)
+        #expect(windows.map(\.id) == ["session", "weekly"])
+        #expect(windows[0].usedFraction == 0)
+        #expect(windows[1].usedFraction == 0.60)
+    }
+
+    @Test func legacyPayloadWithoutDurationsKeepsPrimarySecondaryFallback() {
+        let limits = CodexRateLimits(
+            primaryPercent: 25,
+            primaryResetsAt: nil,
+            secondaryPercent: 50,
+            secondaryResetsAt: nil,
+            planType: "plus"
+        )
+
+        let windows = CodexProvider.normalizedWindows(from: limits)
+        #expect(windows.map(\.id) == ["session", "weekly"])
+        #expect(windows[0].usedFraction == 0.25)
+        #expect(windows[1].usedFraction == 0.50)
     }
 
     @Test func includesDesktopBundledCodexCandidates() {
