@@ -87,8 +87,11 @@ struct EdgePillShape: Shape {
         )
         path.addCurve(
             to: p(0.000, transitionFraction),
-            control1: p(0.400, transitionFraction * 0.61),
-            control2: p(0.000, transitionFraction * 0.72)
+            // The first handle continues the shoulder tangent while the last
+            // two handles share the vertical edge. This lets curvature decay
+            // to zero before the path becomes a straight line.
+            control1: p(0.000, transitionFraction * 0.65),
+            control2: p(0.000, transitionFraction * 0.82)
         )
 
         // Long straight free edge.
@@ -97,8 +100,8 @@ struct EdgePillShape: Shape {
         // Bottom transition: exact vertical mirror of the top geometry.
         path.addCurve(
             to: p(0.680, 1 - transitionFraction * 0.53),
-            control1: p(0.000, 1 - transitionFraction * 0.72),
-            control2: p(0.400, 1 - transitionFraction * 0.61)
+            control1: p(0.000, 1 - transitionFraction * 0.82),
+            control2: p(0.000, 1 - transitionFraction * 0.65)
         )
         path.addCurve(
             to: p(1.000, 1.000),
