@@ -155,7 +155,7 @@ struct InstrumentConsoleView: View {
         HStack(spacing: 4) {
             ForEach(ProviderID.allCases, id: \.self) { provider in
                 Button {
-                    withAnimation(.easeOut(duration: 0.16)) { selection.selected = provider }
+                    withAnimation(.easeOut(duration: 0.16)) { selection.selectFromMenu(provider) }
                 } label: {
                     HStack(spacing: 7) {
                         BrandMark(provider: provider, size: 16)

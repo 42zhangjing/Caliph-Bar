@@ -59,7 +59,7 @@ final class FloatingPillWindow: NSObject {
         panel.isMovableByWindowBackground = false
         panel.acceptsMouseMovedEvents = true
 
-        hosting = NSHostingController(rootView: FloatingPillView(store: store, selection: selection, position: position))
+        hosting = NSHostingController(rootView: FloatingPillView(store: store, position: position))
         hosting.view.wantsLayer = true
         hosting.view.layer?.backgroundColor = .clear
         panel.contentViewController = hosting
@@ -185,9 +185,9 @@ final class FloatingPillWindow: NSObject {
     }
 
     private func handleProviderAction(_ provider: ProviderID, isTap: Bool) {
-        if selection.selected != provider {
+        if selection.sidePreview != provider {
             withAnimation(.easeOut(duration: 0.14)) {
-                selection.selected = provider
+                selection.previewFromPill(provider)
             }
         }
 

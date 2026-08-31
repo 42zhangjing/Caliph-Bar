@@ -4,14 +4,23 @@ import CaliphBarCore
 
 @MainActor
 final class SelectionModel: ObservableObject {
-    @Published var selected: ProviderID {
+    @Published private(set) var selected: ProviderID {
         didSet { UserDefaults.standard.set(selected.rawValue, forKey: Self.key) }
     }
+    @Published private(set) var sidePreview: ProviderID? = nil
 
     private static let key = "caliphbar.selectedProvider"
 
     init() {
         let raw = UserDefaults.standard.string(forKey: Self.key)
         selected = raw.flatMap(ProviderID.init(rawValue:)) ?? .claude
+    }
+
+    func selectFromMenu(_ provider: ProviderID) {
+        selected = provider
+    }
+
+    func previewFromPill(_ provider: ProviderID) {
+        sidePreview = provider
     }
 }
