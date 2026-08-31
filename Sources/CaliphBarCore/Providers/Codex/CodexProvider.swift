@@ -75,7 +75,7 @@ public struct CodexProvider: UsageProvider {
     /// official `windowDurationMins` value when available so a future slot reordering cannot
     /// silently swap the 5-hour and weekly labels. Older rollout data often lacks duration,
     /// so only that legacy shape falls back to primary=session / secondary=weekly.
-    private static func normalizedWindows(
+    static func normalizedWindows(
         from limits: CodexRateLimits,
         now: Date? = nil,
         discardExpired: Bool = false
