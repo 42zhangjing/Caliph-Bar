@@ -29,4 +29,12 @@ import Testing
         #expect(parsed?.secondaryPercent == 35)
         #expect(parsed?.planType == "pro")
     }
+
+    @Test func includesDesktopBundledCodexCandidates() {
+        let candidates = CodexBundledCLIEnvironment.wellKnownCandidates(home: "/Users/tester")
+        #expect(candidates.contains("/Applications/ChatGPT.app/Contents/Resources/codex"))
+        #expect(candidates.contains("/Applications/Codex.app/Contents/Resources/codex"))
+        #expect(candidates.contains("/Users/tester/Applications/ChatGPT.app/Contents/Resources/codex"))
+        #expect(candidates.contains("/Users/tester/Applications/Codex.app/Contents/Resources/codex"))
+    }
 }
