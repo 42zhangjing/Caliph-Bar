@@ -1,5 +1,36 @@
 import Foundation
 
+public struct CodexExtraRateLimit: Equatable, Sendable {
+    public let id: String
+    public let name: String?
+    public let primaryPercent: Double?
+    public let primaryResetsAt: Date?
+    public let primaryWindowMinutes: Double?
+    public let secondaryPercent: Double?
+    public let secondaryResetsAt: Date?
+    public let secondaryWindowMinutes: Double?
+
+    public init(
+        id: String,
+        name: String?,
+        primaryPercent: Double?,
+        primaryResetsAt: Date?,
+        primaryWindowMinutes: Double?,
+        secondaryPercent: Double?,
+        secondaryResetsAt: Date?,
+        secondaryWindowMinutes: Double?
+    ) {
+        self.id = id
+        self.name = name
+        self.primaryPercent = primaryPercent
+        self.primaryResetsAt = primaryResetsAt
+        self.primaryWindowMinutes = primaryWindowMinutes
+        self.secondaryPercent = secondaryPercent
+        self.secondaryResetsAt = secondaryResetsAt
+        self.secondaryWindowMinutes = secondaryWindowMinutes
+    }
+}
+
 public struct CodexRateLimits: Equatable, Sendable {
     public let primaryPercent: Double
     public let primaryResetsAt: Date?
@@ -8,6 +39,7 @@ public struct CodexRateLimits: Equatable, Sendable {
     public let secondaryResetsAt: Date?
     public let secondaryWindowMinutes: Double?
     public let planType: String?
+    public let extraRateLimits: [CodexExtraRateLimit]
 
     public init(
         primaryPercent: Double,
@@ -16,7 +48,8 @@ public struct CodexRateLimits: Equatable, Sendable {
         secondaryPercent: Double?,
         secondaryResetsAt: Date?,
         secondaryWindowMinutes: Double? = nil,
-        planType: String?
+        planType: String?,
+        extraRateLimits: [CodexExtraRateLimit] = []
     ) {
         self.primaryPercent = primaryPercent
         self.primaryResetsAt = primaryResetsAt
@@ -25,6 +58,7 @@ public struct CodexRateLimits: Equatable, Sendable {
         self.secondaryResetsAt = secondaryResetsAt
         self.secondaryWindowMinutes = secondaryWindowMinutes
         self.planType = planType
+        self.extraRateLimits = extraRateLimits
     }
 }
 
