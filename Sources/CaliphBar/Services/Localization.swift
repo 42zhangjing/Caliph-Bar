@@ -63,6 +63,14 @@ public final class L10n: ObservableObject {
         isChinese ? "每周限额" : "Weekly limit"
     }
 
+    public var codexSparkSessionUsage: String {
+        isChinese ? "Codex Spark · 5 小时" : "Codex Spark · 5-hour"
+    }
+
+    public var codexSparkWeeklyUsage: String {
+        isChinese ? "Codex Spark · 每周" : "Codex Spark · Weekly"
+    }
+
     public var remaining: String {
         isChinese ? "剩余" : "remaining"
     }
