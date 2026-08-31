@@ -4,7 +4,9 @@ import CaliphBarCore
 
 enum SideDetailPanelLayout {
     static let cardWidth: CGFloat = 286
-    static let cardHeight: CGFloat = 150
+    // Fixed across every provider. The extra height allows Codex to expose up to four
+    // account-truth quota lanes without making the panel resize while hovering providers.
+    static let cardHeight: CGFloat = 204
     static let pointerLength: CGFloat = 34
     static let shadowPadding: CGFloat = 16
 
@@ -144,7 +146,7 @@ struct SideDetailPanelView: View {
     }
 
     private func providerContent(_ item: ProviderSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 BrandMark(provider: item.provider, size: 19)
 
@@ -168,8 +170,8 @@ struct SideDetailPanelView: View {
                     .foregroundStyle(.white.opacity(0.48))
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(Array(item.windows.prefix(3))) { window in
+                VStack(spacing: 7) {
+                    ForEach(Array(item.windows.prefix(4))) { window in
                         CompactUsageBar(window: window)
                     }
                 }
@@ -178,7 +180,7 @@ struct SideDetailPanelView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 13)
+        .padding(.vertical, 12)
         .frame(
             width: SideDetailPanelLayout.cardWidth,
             height: SideDetailPanelLayout.cardHeight,
@@ -219,17 +221,17 @@ private struct CompactUsageBar: View {
     @ObservedObject private var l10n = L10n.shared
 
     private var localizedTitle: String {
-        if window.id == "session" || window.title.localizedCaseInsensitiveContains("session") {
-            return l10n.sessionUsage
+        switch window.id {
+        case "session": return l10n.sessionUsage
+        case "weekly": return l10n.weeklyUsage
+        case "codex-spark-session": return l10n.codexSparkSessionUsage
+        case "codex-spark-weekly": return l10n.codexSparkWeeklyUsage
+        default: return window.title
         }
-        if window.id == "weekly" || window.title.localizedCaseInsensitiveContains("week") {
-            return l10n.weeklyUsage
-        }
-        return window.title
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3.5) {
             HStack(alignment: .firstTextBaseline) {
                 Text(localizedTitle)
                     .font(.system(size: 10.5, weight: .medium))
@@ -258,7 +260,7 @@ private struct CompactUsageBar: View {
                         .animation(.easeOut(duration: 0.22), value: window.remainingFraction)
                 }
             }
-            .frame(height: 4.5)
+            .frame(height: 4)
 
             Text(l10n.remainingPercentText(Int((window.remainingFraction * 100).rounded())))
                 .font(.system(size: 9.5, weight: .medium, design: .rounded))
@@ -291,7 +293,8 @@ struct DetailPanelView: View {
 
     private let backgroundColor = Color(red: 0.045, green: 0.046, blue: 0.052)
     private let cardWidth: CGFloat = 342
-    private let contentHeight: CGFloat = 258
+    // Keep one footprint across providers/settings while leaving room for four Codex lanes.
+    private let contentHeight: CGFloat = 326
 
     var body: some View {
         cardContent
@@ -422,7 +425,7 @@ struct DetailPanelView: View {
                     .foregroundStyle(.white.opacity(0.48))
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                ForEach(item.windows.prefix(3)) { window in
+                ForEach(item.windows.prefix(4)) { window in
                     UsageBar(window: window)
                 }
                 if let note = item.note {
