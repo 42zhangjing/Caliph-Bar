@@ -7,6 +7,7 @@ final class PillPositionModel: ObservableObject {
     @Published var isHovered: Bool = false
 
     var onProviderTapped: ((ProviderID) -> Void)?
+    var onRadarTapped: (() -> Void)?
     var onDragMoved: ((CGSize) -> Void)?
     var onDragEnded: ((CGSize) -> Void)?
 
@@ -35,11 +36,15 @@ struct FloatingPillView: View {
     }
 
     private var surfaceWidth: CGFloat {
-        isExpanded ? SideNotchLayout.windowSize.width : 14
+        isExpanded ? windowSize.width : 16
     }
 
     private var surfaceHeight: CGFloat {
-        isExpanded ? SideNotchLayout.windowSize.height : 72
+        isExpanded ? windowSize.height : 76
+    }
+
+    private var windowSize: CGSize {
+        SideNotchLayout.windowSize(radarPinned: store.radarPinned)
     }
 
     var body: some View {
@@ -50,8 +55,8 @@ struct FloatingPillView: View {
                 .simultaneousGesture(dragGesture)
         }
         .frame(
-            width: SideNotchLayout.windowSize.width,
-            height: SideNotchLayout.windowSize.height,
+            width: windowSize.width,
+            height: windowSize.height,
             alignment: edgeAlignment
         )
         .animation(.interpolatingSpring(stiffness: 280, damping: 22), value: isExpanded)
@@ -69,6 +74,16 @@ struct FloatingPillView: View {
                         .move(edge: position.side == .right ? .trailing : .leading)
                             .combined(with: .opacity)
                     )
+            } else {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 2, height: 24)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: position.side == .right ? .leading : .trailing
+                    )
+                    .padding(position.side == .right ? .leading : .trailing, 4)
             }
         }
     }
@@ -87,8 +102,18 @@ struct FloatingPillView: View {
                     }
                 )
             }
+            if store.radarPinned {
+                RadarPillButton {
+                    position.onRadarTapped?()
+                }
+            }
         }
-        .frame(width: SideNotchLayout.windowSize.width, height: SideNotchLayout.windowSize.height)
+        .frame(width: SideNotchLayout.visibleWidth, height: windowSize.height)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: position.side == .right ? .leading : .trailing
+        )
     }
 
     private var dragGesture: some Gesture {
@@ -100,6 +125,52 @@ struct FloatingPillView: View {
                 position.onDragEnded?(value.translation)
             }
     }
+}
+
+private struct RadarPillButton: View {
+    let action: () -> Void
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: 3.5)
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(CodexRadarPresentation.brandColor)
+                }
+                .frame(width: SideNotchLayout.ringSize, height: SideNotchLayout.ringSize)
+
+                Text(probabilityLabel)
+                    .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.78))
+            }
+            .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
+        }
+        .buttonStyle(PillItemButtonStyle())
+        .accessibilityLabel("Reset Radar")
+        .accessibilityValue(accessibilityValue)
+        .help(l10n.isChinese ? "Codex Reset Radar 公共情报" : "Codex Reset Radar public intelligence")
+    }
+
+    private var probabilityLabel: String {
+        guard let value = radar.snapshot?.probability24h else { return "RADAR" }
+        return "\(Int((value * 100).rounded()))%"
+    }
+
+    private var accessibilityValue: String {
+        let state = CodexRadarPresentation.statusLabel(
+            for: radar.signal,
+            isChinese: l10n.isChinese
+        )
+        guard radar.snapshot?.probability24h != nil else { return state }
+        return "\(state), 24H \(probabilityLabel)"
+    }
+
 }
 
 private struct ProviderPillButton: View {
@@ -114,13 +185,14 @@ private struct ProviderPillButton: View {
         let remaining = snapshot?.headlineRemainingFraction
         Button(action: action) {
             VStack(spacing: 3) {
-                RingView(provider: provider, remainingFraction: remaining, size: 46)
+                RingView(provider: provider, remainingFraction: remaining, size: SideNotchLayout.ringSize)
 
                 if let remaining {
                     let percent = Int((remaining * 100).rounded())
                     HStack(spacing: 4) {
                         Text("\(percent)%")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
+                            .monospacedDigit()
                             .foregroundStyle(StatusColor.color(for: remaining))
                             .animation(.easeOut(duration: 0.18), value: remaining)
 
@@ -140,23 +212,16 @@ private struct ProviderPillButton: View {
     }
 
     private var radarColor: Color {
-        switch radar.signal {
-        case .hot: return .red
-        case .watch: return .yellow
-        case .quiet: return .green.opacity(0.78)
-        case .stale, .offline: return .white.opacity(0.24)
-        }
+        CodexRadarPresentation.statusColor(for: radar.signal)
     }
 
     private var radarHelp: String {
         let signal: String
-        switch radar.signal {
-        case .quiet: signal = l10n.isChinese ? "Radar 安静" : "Radar QUIET"
-        case .watch: signal = l10n.isChinese ? "Radar 关注" : "Radar WATCH"
-        case .hot: signal = l10n.isChinese ? "Radar 强信号" : "Radar HOT"
-        case .stale: signal = l10n.isChinese ? "Radar 旧情报" : "Radar STALE"
-        case .offline: signal = l10n.isChinese ? "Radar 离线" : "Radar OFFLINE"
-        }
+        signal = "Radar " + CodexRadarPresentation.statusLabel(
+            for: radar.signal,
+            isChinese: l10n.isChinese,
+            compact: true
+        )
         if let probability = radar.snapshot?.probability24h {
             return "\(signal) · 24h \(Int((probability * 100).rounded()))%"
         }

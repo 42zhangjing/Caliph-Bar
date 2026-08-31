@@ -25,6 +25,7 @@ struct UsageBar: View {
                 if let reset = window.resetsAt {
                     Text(l10n.resetsText(at: reset))
                         .font(.system(size: 10.5))
+                        .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.45))
                         .help(reset.formatted(date: .abbreviated, time: .shortened))
                 }
@@ -43,7 +44,8 @@ struct UsageBar: View {
 
             let remainingPercent = Int((window.remainingFraction * 100).rounded())
             Text(l10n.remainingPercentText(remainingPercent))
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(StatusColor.color(for: window.remainingFraction))
         }
     }

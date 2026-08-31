@@ -3,7 +3,7 @@ import Testing
 @testable import CaliphBarCore
 
 @Suite struct AntigravityQuotaSummaryTests {
-    @Test func parsesGroupedQuotaSummaryAndUsesMostConstrainedCadence() throws {
+    @Test func parsesGroupedQuotaSummaryAndKeepsBothModelFamilies() throws {
         let json = #"""
         {
           "response": {
@@ -50,13 +50,17 @@ import Testing
         let snapshot = try AntigravityProvider.makeSnapshot(from: summary)
         #expect(snapshot.provider == .gemini)
         #expect(snapshot.source == .live)
-        #expect(snapshot.windows.count == 2)
+        #expect(snapshot.windows.count == 4)
 
-        let session = snapshot.windows.first { $0.id == "session" }
-        let weekly = snapshot.windows.first { $0.id == "weekly" }
-        #expect(abs((session?.usedFraction ?? -1) - 0.35) < 0.0001)
-        #expect(abs((weekly?.usedFraction ?? -1) - 0.60) < 0.0001)
-        #expect(session?.resetsAt == nil)
+        let geminiSession = snapshot.windows.first { $0.id == "antigravity-gemini-session" }
+        let geminiWeekly = snapshot.windows.first { $0.id == "antigravity-gemini-weekly" }
+        let claudeSession = snapshot.windows.first { $0.id == "antigravity-claude-gpt-session" }
+        let claudeWeekly = snapshot.windows.first { $0.id == "antigravity-claude-gpt-weekly" }
+        #expect(abs((geminiSession?.usedFraction ?? -1) - 0.15) < 0.0001)
+        #expect(abs((geminiWeekly?.usedFraction ?? -1) - 0.60) < 0.0001)
+        #expect(abs((claudeSession?.usedFraction ?? -1) - 0.35) < 0.0001)
+        #expect(abs((claudeWeekly?.usedFraction ?? -1) - 0.10) < 0.0001)
+        #expect(geminiSession?.resetsAt != nil)
     }
 
     @Test func supportsRootGroupsAndEpochReset() throws {
@@ -81,7 +85,7 @@ import Testing
         let summary = try AntigravityQuotaSummaryParser.parse(Data(json.utf8))
         let snapshot = try AntigravityProvider.makeSnapshot(from: summary)
         #expect(snapshot.windows.count == 1)
-        #expect(snapshot.windows[0].id == "session")
+        #expect(snapshot.windows[0].id == "antigravity-gemini-session")
         #expect(abs(snapshot.windows[0].usedFraction - 0.75) < 0.0001)
         #expect(snapshot.windows[0].resetsAt != nil)
     }

@@ -11,7 +11,7 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 
 ## UI and interaction
 
-- draggable floating edge pill with provider rings
+- smaller draggable floating edge pill with provider rings; the default three-row rail is `62 × 288` points and the optional four-row Radar layout is `62 × 328`
 - continuous custom Bezier silhouette that docks flush to the physical left/right display edge
 - remembers vertical position and dock side
 - optional hover-to-expand mode
@@ -24,6 +24,8 @@ CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage
 - Chinese / English / Follow System language options
 - menu-bar percentage follows the current provider selection
 - Codex pill can show a separate Radar signal dot; the dot never changes the real account percentage
+- optional independent Radar rail module, explicit left/right docking, and a center-position reset
+- progressive provider refresh feedback instead of waiting for the slowest source before updating the UI
 
 ## Other features
 
@@ -86,13 +88,13 @@ CaliphBar now prefers a fresh local query through the official Codex CLI process
 codex -s read-only -a never app-server
 ```
 
-It initializes the local JSON-RPC session and requests:
+It performs a bounded read-only JSON-RPC handshake and requests:
 
 ```text
 account/rateLimits/read
 ```
 
-The returned `rateLimits.primary` / `secondary` values are used for the current session and weekly lanes. This is a local subprocess interaction with the Codex CLI; CaliphBar does not read the Codex OAuth token and does not directly call a private ChatGPT HTTP endpoint.
+The bundled alpha CLI may buffer JSONL stdout while stdin remains open, so CaliphBar closes the one-shot request input after the local snapshot has completed to flush the official response. The returned `rateLimits.primary` / `secondary` values are used for the current session and weekly lanes. This is a local subprocess interaction with the Codex CLI; CaliphBar does not read the Codex OAuth token and does not directly call a private ChatGPT HTTP endpoint.
 
 If the app-server query is unavailable, CaliphBar can inspect the newest `$CODEX_HOME/sessions/**/rollout-*.jsonl` or `~/.codex/sessions/**/rollout-*.jsonl` as a local fallback. Rollout data is historical observation data: a lane whose reset timestamp is already in the past is discarded, and any usable rollout fallback is labeled `STALE`, never `LIVE`.
 
@@ -108,7 +110,7 @@ POST https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/Retri
 
 The local server uses a self-signed certificate. CaliphBar relaxes certificate trust **only** for literal `127.0.0.1` / `localhost` requests and never redirects that trust to a remote host.
 
-The preferred Antigravity 2.x quota summary contains two real quota families (`Gemini Models` and `Claude and GPT models`) with five-hour and weekly buckets. CaliphBar uses the most constrained known family for each cadence as the compact session/weekly monitor, so the pill errs on the side of warning about the quota that will run out first.
+The preferred Antigravity 2.x quota summary contains two real quota families (`Gemini Models` and `Claude and GPT models`) with five-hour and weekly buckets. CaliphBar preserves all four real lanes in the main panel and fixed-size hover card. The compact rail headline uses the most constrained visible family so it still warns about the quota that will run out first.
 
 If the desktop app is unavailable, CaliphBar can reuse a signed-in `agy` process that is already running. It intentionally does not launch, own, or kill `agy` in this version. No Google OAuth token is read or stored by CaliphBar.
 
@@ -120,7 +122,7 @@ Codex Radar is not an account provider. The current personal build polls the pub
 https://codexradar.com/current.json
 ```
 
-on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Public Radar status/probability may create a `QUIET`, `WATCH`, `HOT`, `STALE`, or `OFFLINE` signal, but it never modifies the user's real Codex percentage or normal reset timestamp.
+on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Internally, public Radar status/probability may create a `quiet`, `watch`, `hot`, `stale`, or `offline` signal, but the UI presents these as unambiguous phrases such as `NO RESET SIGNAL` / `暂无重置信号`. Radar probability uses neutral styling and never modifies or visually impersonates the user's real Codex percentage or normal reset timestamp.
 
 If CaliphBar observes a large real quota jump across a reset boundary, it can record a small local confirmation event and correlate it with Radar state. Only percentage/reset metadata is retained locally; it is never uploaded to Codex Radar.
 

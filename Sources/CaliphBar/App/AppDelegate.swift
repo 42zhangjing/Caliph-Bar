@@ -56,6 +56,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
+        pillWindow.onRadarTapped = { [weak self] anchor, pillFrame, screen, side in
+            guard let self else { return }
+            CodexRadarStore.shared.refresh()
+            self.detailPanel.showRadarOrUpdate(
+                anchoredTo: anchor,
+                on: screen,
+                side: side,
+                excluding: pillFrame
+            )
+        }
+
+        pillWindow.onRadarHovered = { [weak self] anchor, pillFrame, screen, side in
+            guard let self else { return }
+            if self.detailPanel.isShown && self.detailPanel.isMenuBarMode { return }
+            self.detailPanel.showRadarOrUpdate(
+                anchoredTo: anchor,
+                on: screen,
+                side: side,
+                excluding: pillFrame
+            )
+        }
+
         pillWindow.onPillMouseExited = { [weak self] in
             self?.detailPanel.scheduleHoverDismiss()
         }

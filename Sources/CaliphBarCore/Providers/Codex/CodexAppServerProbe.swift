@@ -7,15 +7,11 @@ import Foundation
 /// Codex OAuth tokens and does not call ChatGPT private HTTP endpoints itself.
 struct CodexAppServerProbe: Sendable {
     func fetchRateLimits() async throws -> CodexRateLimits {
-        let session = try CodexRPCSession()
-        defer { session.shutdown() }
-
-        try await session.initialize()
-        let message = try await session.request(method: "account/rateLimits/read", timeout: 10.0)
-        guard let limits = CodexAppServerRateLimitParser.parse(message: message) else {
-            throw CodexAppServerError.invalidPayload("missing rateLimits.primary.usedPercent")
-        }
-        return limits
+        try await Task.detached(priority: .utility) {
+            let session = try CodexRPCSession()
+            defer { session.shutdown() }
+            return try session.fetchRateLimitsOneShot()
+        }.value
     }
 }
 
@@ -209,6 +205,43 @@ private final class CodexRPCSession: @unchecked Sendable {
         } catch {
             throw CodexAppServerError.launchFailed(error.localizedDescription)
         }
+    }
+
+    /// Current alpha builds of the bundled Codex CLI can buffer stdout while stdin stays open.
+    /// Queue the read-only handshake and snapshot request, allow the local request to finish,
+    /// then close stdin so the JSONL response is flushed. The app refreshes this snapshot every
+    /// minute; no OAuth token or private HTTP endpoint is accessed by CaliphBar.
+    func fetchRateLimitsOneShot() throws -> CodexRateLimits {
+        try write([
+            "id": 1,
+            "method": "initialize",
+            "params": ["clientInfo": ["name": "caliphbar", "title": "CaliphBar", "version": "0.2"]],
+        ])
+        try sendNotification(method: "initialized")
+        try write([
+            "id": 2,
+            "method": "account/rateLimits/read",
+            "params": NSNull(),
+        ])
+
+        Thread.sleep(forTimeInterval: 5.0)
+        try? stdinPipe.fileHandleForWriting.close()
+        let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+
+        for line in data.split(separator: 0x0A) {
+            guard let message = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  Self.integer(message["id"]) == 2
+            else { continue }
+            if let error = message["error"] {
+                throw CodexAppServerError.rpcError(String(describing: error))
+            }
+            guard let limits = CodexAppServerRateLimitParser.parse(message: message) else {
+                throw CodexAppServerError.invalidPayload("missing rateLimits.primary.usedPercent")
+            }
+            return limits
+        }
+
+        throw CodexAppServerError.invalidPayload("account/rateLimits/read did not return before the local snapshot closed")
     }
 
     func initialize() async throws {

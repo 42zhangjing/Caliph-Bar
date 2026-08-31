@@ -8,6 +8,7 @@ final class DetailPanelWindow {
     private enum PanelMode: Equatable {
         case menuBar
         case side(EdgeSide)
+        case sideRadar(EdgeSide)
     }
 
     private let panel: NSPanel
@@ -54,10 +55,29 @@ final class DetailPanelWindow {
         side: EdgeSide?,
         excluding exclusionFrame: NSRect?
     ) {
+        let mode: PanelMode = side.map(PanelMode.side) ?? .menuBar
+        present(mode: mode, anchoredTo: anchor, on: screen, side: side, excluding: exclusionFrame)
+    }
+
+    func showRadarOrUpdate(
+        anchoredTo anchor: NSRect,
+        on screen: NSScreen,
+        side: EdgeSide,
+        excluding exclusionFrame: NSRect?
+    ) {
+        present(mode: .sideRadar(side), anchoredTo: anchor, on: screen, side: side, excluding: exclusionFrame)
+    }
+
+    private func present(
+        mode newMode: PanelMode,
+        anchoredTo anchor: NSRect,
+        on screen: NSScreen,
+        side: EdgeSide?,
+        excluding exclusionFrame: NSRect?
+    ) {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
 
-        let newMode: PanelMode = side.map(PanelMode.side) ?? .menuBar
         outsideClickExclusionFrame = exclusionFrame
 
         if panel.contentViewController == nil || currentMode != newMode {
@@ -71,6 +91,8 @@ final class DetailPanelWindow {
                 rootView = AnyView(
                     SideDetailPanelView(store: store, selection: selection, side: edge)
                 )
+            case let .sideRadar(edge):
+                rootView = AnyView(SideRadarPanelView(side: edge))
             }
 
             let hosting = NSHostingController(rootView: rootView)
@@ -115,7 +137,7 @@ final class DetailPanelWindow {
 
     private func preferredSize(for mode: PanelMode, hosting: NSViewController) -> NSSize {
         switch mode {
-        case .side:
+        case .side, .sideRadar:
             return NSSize(
                 width: SideDetailPanelLayout.contentSize.width,
                 height: SideDetailPanelLayout.contentSize.height

@@ -44,21 +44,28 @@ public struct AntigravityProvider: UsageProvider {
         }
 
         var windows: [UsageWindow] = []
-        if let session = mostConstrained(.session, in: candidates) {
-            windows.append(UsageWindow(
-                id: "session",
-                title: "Current session",
-                usedFraction: session.usedFraction,
-                resetsAt: session.resetsAt
-            ))
-        }
-        if let weekly = mostConstrained(.weekly, in: candidates) {
-            windows.append(UsageWindow(
-                id: "weekly",
-                title: "Weekly limit",
-                usedFraction: weekly.usedFraction,
-                resetsAt: weekly.resetsAt
-            ))
+        let knownFamilies: [(Family, String, String)] = [
+            (.gemini, "gemini", "Gemini"),
+            (.claudeGPT, "claude-gpt", "Claude/GPT"),
+        ]
+        for (family, slug, label) in knownFamilies {
+            let familyCandidates = candidates.filter { sameFamily($0.family, family) }
+            if let session = mostConstrained(.session, in: familyCandidates) {
+                windows.append(UsageWindow(
+                    id: "antigravity-\(slug)-session",
+                    title: "\(label) 5-hour",
+                    usedFraction: session.usedFraction,
+                    resetsAt: session.resetsAt
+                ))
+            }
+            if let weekly = mostConstrained(.weekly, in: familyCandidates) {
+                windows.append(UsageWindow(
+                    id: "antigravity-\(slug)-weekly",
+                    title: "\(label) Weekly",
+                    usedFraction: weekly.usedFraction,
+                    resetsAt: weekly.resetsAt
+                ))
+            }
         }
 
         // Future/unknown bucket names should still be useful without inventing a cadence.
@@ -122,6 +129,14 @@ public struct AntigravityProvider: UsageProvider {
     private static func sameCadence(_ lhs: Cadence, _ rhs: Cadence) -> Bool {
         switch (lhs, rhs) {
         case (.session, .session), (.weekly, .weekly), (.other, .other): return true
+        default: return false
+        }
+    }
+
+    private static func sameFamily(_ lhs: Family, _ rhs: Family) -> Bool {
+        switch (lhs, rhs) {
+        case (.gemini, .gemini), (.claudeGPT, .claudeGPT): return true
+        case let (.other(lhs), .other(rhs)): return lhs == rhs
         default: return false
         }
     }
