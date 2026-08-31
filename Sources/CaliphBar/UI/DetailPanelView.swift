@@ -273,9 +273,9 @@ private struct CompactUsageBar: View {
             .frame(height: 4)
 
             Text(l10n.remainingPercentText(Int((window.remainingFraction * 100).rounded())))
-                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle(StatusColor.color(for: window.remainingFraction))
+                .foregroundStyle(StatusColor.valueColor(for: window.remainingFraction))
         }
     }
 }

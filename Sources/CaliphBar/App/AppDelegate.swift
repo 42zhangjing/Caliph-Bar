@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let remaining = item?.headlineRemainingFraction {
             let percent = Int((remaining * 100).rounded())
             title = " \(percent)%"
-            color = StatusColor.nsColor(for: remaining)
+            color = StatusColor.nsValueColor(for: remaining)
         } else {
             title = " —"
             color = .secondaryLabelColor
@@ -128,7 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             string: title,
             attributes: [
                 .foregroundColor: color,
-                .font: NSFont.menuBarFont(ofSize: 0),
+                .font: NSFont.monospacedDigitSystemFont(
+                    ofSize: NSFont.menuBarFont(ofSize: 0).pointSize,
+                    weight: .semibold
+                ),
             ]
         )
         let l10n = L10n.shared

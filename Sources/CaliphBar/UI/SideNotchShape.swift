@@ -12,8 +12,8 @@ enum SideNotchLayout {
     static let radarWindowSize = CGSize(width: visibleWidth + edgeBleed, height: 328)
     static let collapsedHeight: CGFloat = 76
     static let itemSize = CGSize(width: 48, height: 56)
-    static let itemSpacing: CGFloat = 8
-    static let ringSize: CGFloat = 32
+    static let itemSpacing: CGFloat = 4
+    static let ringSize: CGFloat = 36
     static let percentageFontSize: CGFloat = 10
 
     /// The canonical silhouette is stored in `Resources/Shapes/caliph-edge-tab.svg`.

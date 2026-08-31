@@ -139,9 +139,12 @@ private struct RadarPillButton: View {
             VStack(spacing: 4) {
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 3)
+                        .fill(Color(red: 0.035, green: 0.039, blue: 0.047).opacity(0.96))
+                        .padding(2.25)
+                    Circle()
+                        .stroke(Color.white.opacity(0.14), lineWidth: 2.25)
                     Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 17, weight: .medium))
                         .foregroundStyle(CodexRadarPresentation.brandColor)
                 }
                 .frame(width: SideNotchLayout.ringSize, height: SideNotchLayout.ringSize)
@@ -150,6 +153,7 @@ private struct RadarPillButton: View {
                     .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.78))
+                    .frame(height: 12)
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
         }
@@ -189,19 +193,24 @@ private struct ProviderPillButton: View {
             VStack(spacing: 4) {
                 RingView(provider: provider, remainingFraction: remaining, size: SideNotchLayout.ringSize)
 
-                if let remaining {
-                    let percent = Int((remaining * 100).rounded())
-                    Text("\(percent)%")
-                        .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(StatusColor.color(for: remaining))
-                        .animation(.easeOut(duration: 0.18), value: remaining)
-                }
+                Text(percentageLabel(for: remaining))
+                    .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(
+                        remaining.map(StatusColor.valueColor(for:)) ?? .white.opacity(0.28)
+                    )
+                    .frame(height: 12)
+                    .animation(.easeOut(duration: 0.18), value: remaining)
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
         }
         .buttonStyle(PillItemButtonStyle())
         .help(provider == .codex ? "\(provider.displayName) · \(radarHelp)" : provider.displayName)
+    }
+
+    private func percentageLabel(for remaining: Double?) -> String {
+        guard let remaining else { return "—" }
+        return "\(Int((remaining * 100).rounded()))%"
     }
 
     private var radarHelp: String {
