@@ -52,6 +52,8 @@ Preferred live usage comes from Anthropic using Claude Code credentials. Backgro
 
 CaliphBar prefers the official local Codex `app-server` JSON-RPC method `account/rateLimits/read`. A successful RPC response is account truth and is labeled `LIVE`; no Codex OAuth token is read by CaliphBar and no private ChatGPT HTTP usage endpoint is called directly.
 
+The bundled alpha CLI currently buffers JSONL stdout while its stdin remains open on some macOS installations. CaliphBar therefore performs a bounded, read-only one-shot handshake and snapshot request, closes stdin to flush the official response, and repeats this local snapshot on the normal refresh interval. Providers publish progressively, so this Codex read never blocks Claude or Antigravity from updating first.
+
 The app-server response contains the ordinary five-hour and weekly windows and may also expose a multi-bucket `rateLimitsByLimitId` map. Model-specific buckets such as Codex Spark are surfaced as additional account-truth windows rather than collapsed into the ordinary two lanes. Window duration metadata is preferred over transport slot order when deciding whether a lane is five-hour or weekly.
 
 Local `rollout-*.jsonl` rate-limit observations are fallback evidence only. Expired lanes are discarded and any usable rollout fallback is labeled `STALE`, never `LIVE`.

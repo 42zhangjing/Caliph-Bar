@@ -137,6 +137,14 @@ public final class L10n: ObservableObject {
         isChinese ? "界面" : "Interface"
     }
 
+    public var settingsEdgeRail: String {
+        isChinese ? "屏幕边缘侧栏" : "Edge Rail"
+    }
+
+    public var settingsDataSources: String {
+        isChinese ? "数据与情报" : "Data & Intelligence"
+    }
+
     public var settingsClaude: String {
         "Claude"
     }
@@ -159,6 +167,45 @@ public final class L10n: ObservableObject {
 
     public var notchBehaviorAlways: String {
         isChinese ? "常驻展开" : "Always Expanded"
+    }
+
+    public var edgeSideLabel: String {
+        isChinese ? "停靠位置" : "Dock Side"
+    }
+
+    public var edgeSideLeft: String {
+        isChinese ? "左侧" : "Left"
+    }
+
+    public var edgeSideRight: String {
+        isChinese ? "右侧" : "Right"
+    }
+
+    public var centerEdgeRail: String {
+        isChinese ? "回到屏幕中部" : "Center on Screen"
+    }
+
+    public var pinRadarModule: String {
+        isChinese ? "侧栏独立显示 Radar" : "Pin Radar to Edge Rail"
+    }
+
+    public var pinRadarModuleHelp: String {
+        isChinese ? "关闭时仍在 Codex 百分比旁显示小状态点" : "When off, a small status dot remains beside Codex."
+    }
+
+    public var onLabel: String { isChinese ? "开" : "ON" }
+    public var offLabel: String { isChinese ? "关" : "OFF" }
+
+    public var accountTruthTitle: String {
+        isChinese ? "账户真实额度" : "Account Truth"
+    }
+
+    public var publicIntelligenceTitle: String {
+        isChinese ? "公共情报" : "Public Intelligence"
+    }
+
+    public var refreshInProgress: String {
+        isChinese ? "正在逐项刷新" : "Refreshing providers"
     }
 
     public var quotaNotifications: String {

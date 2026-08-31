@@ -73,7 +73,10 @@ public struct ProviderSnapshot: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var headlineRemainingFraction: Double? {
-        windows.first?.remainingFraction
+        if provider == .gemini {
+            return windows.map(\.remainingFraction).min()
+        }
+        return windows.first?.remainingFraction
     }
 
     public static func unavailable(provider: ProviderID, note: String) -> ProviderSnapshot {

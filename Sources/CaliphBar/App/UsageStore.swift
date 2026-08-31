@@ -7,6 +7,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var items: [ProviderSnapshot] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var refreshingProviders: Set<ProviderID> = []
     @Published var credentialRepairMessage: String?
 
     @Published var notificationsEnabled: Bool {
@@ -28,6 +29,14 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(pillBehavior.rawValue, forKey: Keys.pillBehavior) }
     }
 
+    @Published var pillSide: EdgeSide {
+        didSet { UserDefaults.standard.set(pillSide.rawValue, forKey: Keys.pillSide) }
+    }
+
+    @Published var radarPinned: Bool {
+        didSet { UserDefaults.standard.set(radarPinned, forKey: Keys.radarPinned) }
+    }
+
     @Published var claudeSessionBudget: Double {
         didSet { UserDefaults.standard.set(claudeSessionBudget, forKey: Keys.sessionBudget) }
     }
@@ -47,6 +56,8 @@ final class UsageStore: ObservableObject {
         static let notifications = "caliphbar.notificationsEnabled"
         static let pillVisible = "caliphbar.pillVisible"
         static let pillBehavior = "caliphbar.pillBehavior"
+        static let pillSide = "caliphbar.pillSide"
+        static let radarPinned = "caliphbar.radarPinned"
         static let sessionBudget = "caliphbar.claudeSessionBudget"
         static let weeklyBudget = "caliphbar.claudeWeeklyBudget"
     }
@@ -62,6 +73,8 @@ final class UsageStore: ObservableObject {
         pillVisible = defaults.object(forKey: Keys.pillVisible) as? Bool ?? true
         let behaviorRaw = defaults.string(forKey: Keys.pillBehavior) ?? PillBehavior.alwaysExpanded.rawValue
         pillBehavior = PillBehavior(rawValue: behaviorRaw) ?? .alwaysExpanded
+        pillSide = defaults.string(forKey: Keys.pillSide).flatMap(EdgeSide.init(rawValue:)) ?? .right
+        radarPinned = defaults.object(forKey: Keys.radarPinned) as? Bool ?? false
         claudeSessionBudget = defaults.object(forKey: Keys.sessionBudget) as? Double ?? 40
         claudeWeeklyBudget = defaults.object(forKey: Keys.weeklyBudget) as? Double ?? 400
         launchAtLogin = LaunchAtLogin.isEnabled
@@ -83,6 +96,7 @@ final class UsageStore: ObservableObject {
     func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
+        refreshingProviders = Set(ProviderID.allCases)
         let context = ProviderFetchContext(
             claudeSessionBudget: claudeSessionBudget,
             claudeWeeklyBudget: claudeWeeklyBudget
@@ -90,16 +104,20 @@ final class UsageStore: ObservableObject {
         let providers = self.providers
 
         Task {
-            let results = await withTaskGroup(of: ProviderFetchResult.self, returning: [ProviderFetchResult].self) { group in
+            await withTaskGroup(of: ProviderFetchResult.self) { group in
                 for provider in providers {
                     group.addTask { await provider.fetch(context: context) }
                 }
-                var output: [ProviderFetchResult] = []
-                for await result in group { output.append(result) }
-                return output
+                for await result in group {
+                    publish(result: result)
+                }
             }
-            publish(results: results)
+            isRefreshing = false
         }
+    }
+
+    func centerPill() {
+        NotificationCenter.default.post(name: .caliphBarCenterPill, object: nil)
     }
 
     func repairClaudeKeychainAccess() {
@@ -118,49 +136,37 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func publish(results: [ProviderFetchResult]) {
-        let byProvider = Dictionary(uniqueKeysWithValues: results.map { ($0.provider, $0) })
-        var resolved: [ProviderSnapshot] = []
-        var cacheChanged = false
-
-        for provider in ProviderID.allCases {
-            guard let result = byProvider[provider] else {
-                resolved.append(.unavailable(provider: provider, note: "Provider did not return a result."))
-                continue
-            }
-
-            if let live = result.liveSnapshot {
-                resolved.append(live)
-                liveCache[provider] = live
-                cacheChanged = true
-                continue
-            }
-
-            if let cached = liveCache[provider],
-               let stale = cache.staleSnapshot(from: cached, error: result.errorDescription) {
-                resolved.append(stale)
-                continue
-            }
-
-            if let fallback = result.fallbackSnapshot {
-                resolved.append(fallback)
-                continue
-            }
-
-            resolved.append(.unavailable(
-                provider: provider,
+    private func publish(result: ProviderFetchResult) {
+        let resolved: ProviderSnapshot
+        if let live = result.liveSnapshot {
+            resolved = live
+            liveCache[result.provider] = live
+            cache.save(liveCache)
+        } else if let cached = liveCache[result.provider],
+                  let stale = cache.staleSnapshot(from: cached, error: result.errorDescription) {
+            resolved = stale
+        } else if let fallback = result.fallbackSnapshot {
+            resolved = fallback
+        } else {
+            resolved = .unavailable(
+                provider: result.provider,
                 note: result.errorDescription ?? "Usage is unavailable."
-            ))
+            )
         }
 
-        items = resolved
+        var byProvider = Dictionary(uniqueKeysWithValues: items.map { ($0.provider, $0) })
+        byProvider[result.provider] = resolved
+        items = ProviderID.allCases.compactMap { byProvider[$0] }
         lastUpdated = Date()
-        isRefreshing = false
-        if cacheChanged { cache.save(liveCache) }
-        UsageNotifier.check(snapshots: resolved, enabled: notificationsEnabled)
+        refreshingProviders.remove(result.provider)
+        UsageNotifier.check(snapshots: items, enabled: notificationsEnabled)
 
-        if let codex = resolved.first(where: { $0.provider == .codex && $0.source == .live }) {
-            CodexRadarStore.shared.observeCodex(codex)
+        if resolved.provider == .codex, resolved.source == .live {
+            CodexRadarStore.shared.observeCodex(resolved)
         }
     }
+}
+
+extension Notification.Name {
+    static let caliphBarCenterPill = Notification.Name("caliphbar.centerPill")
 }

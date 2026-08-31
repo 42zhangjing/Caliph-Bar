@@ -7,9 +7,11 @@ enum EdgeSide: String, Codable, Equatable {
 }
 
 enum SideNotchLayout {
-    static let windowSize = CGSize(width: 74, height: 344)
-    static let itemSize = CGSize(width: 56, height: 66)
-    static let itemSpacing: CGFloat = 13
+    static let windowSize = CGSize(width: 62, height: 288)
+    static let itemSize = CGSize(width: 48, height: 56)
+    static let itemSpacing: CGFloat = 8
+    static let ringSize: CGFloat = 39
+    static let percentageFontSize: CGFloat = 10.5
 
     /// Extends the panel slightly beyond the physical display edge so the
     /// closing edge of the shape is never visible as a separate black bar.

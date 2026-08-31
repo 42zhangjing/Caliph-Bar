@@ -44,7 +44,13 @@ struct CodexRadarSnapshot: Codable, Equatable, Sendable {
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
 
-        if ["hot", "high", "strong", "confirmed", "open", "active"].contains(where: words.contains) {
+        if windowOpen == false,
+           ["closed", "wait", "quiet", "inactive"].contains(where: words.contains),
+           (probability24h ?? 0) < 0.35 {
+            return .quiet
+        }
+
+        if ["hot", "high", "strong", "open", "active"].contains(where: words.contains) {
             return .hot
         }
         if let probability24h, probability24h >= 0.65 { return .hot }
@@ -312,11 +318,13 @@ private enum CodexRadarParser {
         let sourceURL = string(window?["source_url"] ?? window?["sourceURL"] ?? root["source_url"])
             .flatMap(URL.init(string:))
 
-        let updated = date(prediction?["updated_at"])
-            ?? date(root["monitored_at"])
-            ?? date(root["updated_at"])
-            ?? date(window?["opened_at"])
-            ?? date(window?["closed_at"])
+        let updated = [
+            date(prediction?["updated_at"]),
+            date(root["monitored_at"]),
+            date(root["updated_at"]),
+            date(window?["opened_at"]),
+            date(window?["closed_at"]),
+        ].compactMap { $0 }.max()
 
         guard windowOpen != nil || status != nil || predictionLevel != nil || probability24h != nil || summary != nil else {
             throw URLError(.cannotParseResponse)

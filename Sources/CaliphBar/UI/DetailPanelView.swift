@@ -6,7 +6,8 @@ enum SideDetailPanelLayout {
     static let cardWidth: CGFloat = 286
     // Fixed across every provider. The extra height allows Codex to expose up to four
     // account-truth quota lanes without making the panel resize while hovering providers.
-    static let cardHeight: CGFloat = 204
+    // Four Antigravity lanes need a real bottom safety area; the edge rail itself stays compact.
+    static let cardHeight: CGFloat = 228
     static let pointerLength: CGFloat = 34
     static let shadowPadding: CGFloat = 16
 
@@ -173,7 +174,7 @@ struct SideDetailPanelView: View {
                     .foregroundStyle(.white.opacity(0.48))
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                VStack(spacing: 7) {
+                VStack(spacing: 8) {
                     ForEach(Array(item.windows.prefix(4))) { window in
                         CompactUsageBar(window: window)
                     }
@@ -272,6 +273,104 @@ private struct CompactUsageBar: View {
     }
 }
 
+struct SideRadarPanelView: View {
+    let side: EdgeSide
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if side == .left { Color.clear.frame(width: SideDetailPanelLayout.pointerLength) }
+
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(spacing: 8) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(signalColor)
+                    Text("RESET RADAR")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(signalLabel)
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(signalColor)
+                }
+
+                Text(l10n.publicIntelligenceTitle)
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.40))
+
+                HStack(spacing: 10) {
+                    probabilityCell("24H", value: radar.snapshot?.probability24h)
+                    probabilityCell("48H", value: radar.snapshot?.probability48h)
+                }
+
+                Text(detailText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+                Text(l10n.isChinese ? "数据来自 Codex 雷达 · 不影响账户额度" : "Data from Codex Radar · separate from account quota")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.32))
+            }
+            .padding(14)
+            .frame(width: SideDetailPanelLayout.cardWidth, height: SideDetailPanelLayout.cardHeight, alignment: .topLeading)
+
+            if side == .right { Color.clear.frame(width: SideDetailPanelLayout.pointerLength) }
+        }
+        .frame(width: SideDetailPanelLayout.cardWidth + SideDetailPanelLayout.pointerLength, height: SideDetailPanelLayout.cardHeight)
+        .background(
+            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
+                .fill(Color(red: 0.025, green: 0.026, blue: 0.030))
+        )
+        .overlay(
+            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
+                .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
+        )
+        .padding(SideDetailPanelLayout.shadowPadding)
+    }
+
+    private func probabilityCell(_ label: String, value: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.38))
+            Text(value.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.88))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.04)))
+    }
+
+    private var signalColor: Color {
+        switch radar.signal {
+        case .hot: return .red
+        case .watch: return .yellow
+        case .quiet: return .green
+        case .stale, .offline: return .white.opacity(0.42)
+        }
+    }
+
+    private var signalLabel: String {
+        switch radar.signal {
+        case .hot: return "HOT"
+        case .watch: return "WATCH"
+        case .quiet: return "QUIET"
+        case .stale: return "STALE"
+        case .offline: return "OFFLINE"
+        }
+    }
+
+    private var detailText: String {
+        radar.snapshot?.summary ?? radar.snapshot?.message ?? (l10n.isChinese ? "等待公共重置情报" : "Waiting for public reset intelligence")
+    }
+}
+
 private struct HeaderIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -301,19 +400,7 @@ struct DetailPanelView: View {
     private let contentHeight: CGFloat = 430
 
     var body: some View {
-        cardContent
-            .frame(width: cardWidth)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(backgroundColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.075), lineWidth: 0.8)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
-            .fixedSize()
+        InstrumentConsoleView(store: store, selection: selection)
     }
 
     private var cardContent: some View {

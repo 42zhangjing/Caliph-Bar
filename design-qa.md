@@ -74,3 +74,21 @@ CI does **not** prove visual quality or interaction feel. After material UI chan
 13. if local reset confirmation appears, verify a concurrent Radar WATCH/HOT signal exists
 
 A UI change is considered complete only after both CI and this local interaction pass succeed.
+
+## Instrument Console redesign — 2026-08-31
+
+- Selected source: `docs/design-qa/instrument-console-reference.png`
+- Implemented full Codex panel: `docs/design-qa/instrument-console-codex.png`
+- Implemented settings: `docs/design-qa/instrument-console-settings.png`
+- Implemented four-lane side detail: `docs/design-qa/instrument-console-side-antigravity.png`
+
+Comparison history:
+
+1. The selected Instrument Console hierarchy was retained: toolbar, equal-width provider selector, Account Truth, and a separate Public Intelligence surface.
+2. The generated reference's large permanent rail was intentionally rejected. The production edge rail remains a compact three-ring monitor and was reduced from `74 × 344` to `62 × 288`; its ring diameter is now 39 points.
+3. Settings replaced low-contrast menu pickers and ambiguous white switches with visible segmented controls and explicit ON/OFF labels. Simplified Chinese, English, and Follow System were exercised in the running app.
+4. Antigravity now exposes Gemini 5-hour/weekly and Claude/GPT 5-hour/weekly. The fixed hover card grew from 204 to 228 points only after the four-lane screenshot revealed inadequate bottom safety space.
+5. Optional Radar pinning adds a fourth compact rail module; disabled remains the default, preserving the small three-row footprint and Codex's tiny Radar status dot.
+6. Right and left docking, center reset, auto-collapse handle, provider hover, Radar independence, progressive refresh, and real local Codex app-server data were exercised in the built macOS app.
+
+Final result: passed.
