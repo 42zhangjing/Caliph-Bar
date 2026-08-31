@@ -44,9 +44,9 @@ struct UsageBar: View {
 
             let remainingPercent = Int((window.remainingFraction * 100).rounded())
             Text(l10n.remainingPercentText(remainingPercent))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle(StatusColor.color(for: window.remainingFraction))
+                .foregroundStyle(StatusColor.valueColor(for: window.remainingFraction))
         }
     }
 }

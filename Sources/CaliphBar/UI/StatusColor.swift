@@ -11,14 +11,6 @@ enum StatusColor {
             Color(red: red, green: green, blue: blue)
         }
 
-        var nsColor: NSColor {
-            NSColor(
-                calibratedRed: CGFloat(red),
-                green: CGFloat(green),
-                blue: CGFloat(blue),
-                alpha: 1
-            )
-        }
     }
 
     private static let alert = Swatch(red: 0.78, green: 0.41, blue: 0.35)
@@ -32,8 +24,26 @@ enum StatusColor {
         swatch(for: remainingFraction).color
     }
 
-    static func nsColor(for remainingFraction: Double) -> NSColor {
-        swatch(for: remainingFraction).nsColor
+    /// Exact quota values use one quieter semantic across the menu bar,
+    /// edge rail, hover panel, and full management panel.
+    static func valueColor(for remainingFraction: Double) -> Color {
+        if remainingFraction < 0.10 {
+            return Color(red: 1.0, green: 0.271, blue: 0.227)
+        } else if remainingFraction < 0.20 {
+            return Color(red: 1.0, green: 0.624, blue: 0.039)
+        } else {
+            return .white.opacity(0.68)
+        }
+    }
+
+    static func nsValueColor(for remainingFraction: Double) -> NSColor {
+        if remainingFraction < 0.10 {
+            return .systemRed
+        } else if remainingFraction < 0.20 {
+            return .systemOrange
+        } else {
+            return .secondaryLabelColor
+        }
     }
 
     private static func swatch(for remainingFraction: Double) -> Swatch {

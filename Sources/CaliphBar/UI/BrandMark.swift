@@ -6,6 +6,8 @@ struct BrandMark: View {
     let provider: ProviderID
     var size: CGFloat = 28
     var isMuted: Bool = false
+    var saturation: Double = 1.0
+    var brightness: Double = 0.0
 
     var body: some View {
         if let image = loadSVGIcon(for: provider) {
@@ -13,6 +15,8 @@ struct BrandMark: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
+                .saturation(saturation)
+                .brightness(brightness)
                 .opacity(isMuted ? 0.70 : 1.0)
                 .accessibilityLabel(provider.displayName)
         } else {
@@ -20,6 +24,8 @@ struct BrandMark: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
+                .saturation(saturation)
+                .brightness(brightness)
                 .opacity(isMuted ? 0.70 : 1.0)
                 .accessibilityLabel(provider.displayName)
         }
