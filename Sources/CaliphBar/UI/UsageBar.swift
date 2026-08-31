@@ -6,12 +6,13 @@ struct UsageBar: View {
     @ObservedObject private var l10n = L10n.shared
 
     var localizedTitle: String {
-        if window.id == "session" || window.title.localizedCaseInsensitiveContains("session") {
-            return l10n.sessionUsage
-        } else if window.id == "weekly" || window.title.localizedCaseInsensitiveContains("week") {
-            return l10n.weeklyUsage
+        switch window.id {
+        case "session": return l10n.sessionUsage
+        case "weekly": return l10n.weeklyUsage
+        case "codex-spark-session": return l10n.codexSparkSessionUsage
+        case "codex-spark-weekly": return l10n.codexSparkWeeklyUsage
+        default: return window.title
         }
-        return window.title
     }
 
     var body: some View {
