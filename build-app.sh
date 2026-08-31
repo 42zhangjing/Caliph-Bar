@@ -16,6 +16,13 @@ then
   exit 1
 fi
 
+EDGE_SVG_STRAIGHT=$(sed -nE 's/^[[:space:]]*L (0) ([0-9.]+)$/\1 \2/p' "$EDGE_SVG")
+EDGE_SWIFT_STRAIGHT=$(sed -nE 's/.*straightEdgeBottom = CGPoint\(x: ([0-9.]+), y: ([0-9.]+)\).*/\1 \2/p' "$EDGE_SWIFT")
+if [ "$EDGE_SVG_STRAIGHT" != "$EDGE_SWIFT_STRAIGHT" ]; then
+  echo "Canonical edge-tab straight edge coordinates differ." >&2
+  exit 1
+fi
+
 echo "Building universal CaliphBar binary (arm64 + x86_64)…"
 swift build -c release --triple arm64-apple-macosx
 swift build -c release --triple x86_64-apple-macosx
