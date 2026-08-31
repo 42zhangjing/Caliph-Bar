@@ -1,100 +1,104 @@
-# CaliphBar UI / Interaction QA
+# CaliphBar 界面与交互验收
 
-This document records the durable design constraints for the floating edge pill and its detail panels. It intentionally avoids machine-specific screenshots, temporary file paths, and claims that cannot be verified in CI.
+本文记录屏幕边缘侧栏、悬浮详情和管理面板必须长期保持的设计约束。文档不依赖某台电脑的临时截图路径，也不把 CI 无法验证的结果写成已经通过。
 
-## Floating edge pill
+## 屏幕边缘侧栏
 
-- The pill is one continuous custom `Path`, not a capsule plus a connector.
-- The screen-facing closing edge bleeds slightly beyond the physical display edge so no separate vertical seam is visible.
-- The free-facing edge uses a restrained two-stage cubic Bezier transition at the top and bottom, with a long straight middle body.
-- Left/right docking must be exact horizontal mirrors.
-- Provider rows use one shared geometry source (`SideNotchLayout`) for visual layout and pointer anchoring.
-- Collapsed mode must not leave a large invisible hit target over other apps.
+- 侧栏使用一条连续的自定义 `Path`，不能用胶囊和连接件拼接。
+- 靠屏幕边缘的闭合线应略微伸出显示区域，避免出现额外竖缝。
+- 朝向桌面的边缘在顶部和底部使用克制的两段三次贝塞尔曲线，中段保留较长直线。
+- 左右停靠必须严格水平镜像。
+- Provider 模块的视觉位置与指针锚点共用 `SideNotchLayout` 几何数据。
+- 收起状态不能在其他应用上方留下大面积透明点击区。
+- 屏幕内可见内容必须为顶部、底部和百分比文字预留安全区。用于消除接缝的越界宽度不能挤占这块空间。
 
-## Hover interaction
+## 悬停交互
 
-- Moving the pointer between Claude, Codex, and Antigravity updates the compact detail card only when the active provider row changes.
-- The compact detail card keeps one fixed outer size across providers; only its content cross-fades and the window position glides to the new provider row.
-- Codex may expose up to four account-truth quota rows (ordinary 5-hour/weekly plus model-specific rows such as Spark); their appearance must not resize the card.
-- The compact Codex card may show a small Radar badge in its header, but must not mix Radar state into quota percentages or reset timestamps.
-- The pointer tip remains vertically aligned with the active provider row.
-- Moving from the pill into its compact detail card must not collapse the pill underneath the pointer.
-- Hover work is rate-limited so duplicate local/global `mouseMoved` events do not cause repeated animations.
+- 鼠标在 Claude、Codex 和 Antigravity 之间移动时，只有活动模块真正变化才更新详情卡片。
+- 三个 Provider 共用固定的详情卡片外框。切换时只交叉淡化内容，并把窗口平滑移动到新模块。
+- Codex 最多可以显示四条账户额度，包括普通 5 小时、每周额度和 Spark 等模型专用额度；出现额外额度时不能改变卡片尺寸。
+- Codex 详情卡片可以在标题处显示很小的 Radar 标记，但不能把 Radar 状态混入账户百分比或重置时间。
+- 卡片指针始终与当前活动模块垂直对齐。
+- 鼠标从侧栏移入详情卡片时，侧栏不能在指针下方收起。
+- 悬停处理需要限流，避免本地与全局 `mouseMoved` 事件重复触发动画。
 
-## Menu-bar panel and settings
+## 管理面板与设置
 
-- Clicking the menu-bar item always opens the full panel, even if a compact side panel is already visible.
-- The full panel and side panel are distinct panel modes and must rebuild their root view when the mode changes.
-- Settings must remain reachable from the full panel through the gear button.
-- Provider tabs use equal widths and a shared selected highlight.
-- Provider tabs expose a full-height hit target and hover feedback; the visible segment and clickable area must match.
-- Settings controls share one aligned right-hand control column.
-- Provider/settings switching keeps a stable panel footprint to avoid visible size jumps.
-- The Codex full panel must visibly include the independent `RESET RADAR` detail strip even when Codex account quota is unavailable; public intelligence and account truth fail independently.
+- 点击菜单栏图标始终打开完整管理面板，即使侧边详情已经显示。
+- 完整面板和侧边详情属于两种面板模式。模式切换时需要重建根视图。
+- 设置入口始终位于完整面板的齿轮按钮。
+- Provider 选择器三等分，并共用一个选中背景。
+- 每个 Provider 标签拥有完整高度的点击区和悬停反馈；可见区域与点击区域必须一致。
+- 设置控件使用对齐的右侧控制列。
+- Provider 和设置页面切换时保持面板尺寸稳定。
+- Codex 账户额度不可用时，完整面板仍要显示独立的 `RESET RADAR` 情报区。两个数据层可以分别失败。
 
-## Motion language
+## 动效语言
 
-- Use short, restrained ease-out motion for provider/content changes.
-- Reserve spring motion for tactile pill reveal/press interactions only.
-- Quota ring and bar changes interpolate smoothly but should not bounce.
-- Avoid animation replay when a value has not changed.
+- Provider 与内容变化使用短促、克制的 ease-out 动画。
+- 弹簧动画只用于侧栏展开和按压等触感交互。
+- 环形与条形进度变化需要平滑插值，但不能弹跳。
+- 数值没有变化时不重放动画。
+- 百分比和概率使用系统等宽数字，避免刷新时横向抖动。
 
-## Data semantics
+## 数据语义
 
-- Current product semantics display **remaining quota**, not used quota.
-- Codex `LIVE` data comes from the official local app-server `account/rateLimits/read`; model-specific `rateLimitsByLimitId` buckets are still account truth, not Radar intelligence.
-- Codex rollout JSONL is STALE-only fallback; expired rollout lanes must not be displayed.
-- Claude may show live, stale, estimated, or unavailable state according to its provider fallback rules.
-- Antigravity uses real local quota-summary data when available; it is not a simulated Gemini placeholder.
-- Public intelligence such as Codex Radar must remain visually separate from real account quota. A Radar signal may annotate Codex but must not alter the user's local percentage or reset timestamp.
-- Radar probabilities are neutral information, not account health. Do not apply the account-quota red/yellow/green ring thresholds to Radar percentages; reserve yellow/red Radar accents for watch/strong signals.
-- User-facing Radar states must be explicit (`暂无重置信号`, `值得关注`, `强重置信号`, `数据超2小时未更新`, `情报离线`) rather than ambiguous labels such as `QUIET` or `情报已过期`.
-- `LOCAL RESET CONFIRMATION` is a correlation label: show it only when a fresh local Codex quota jump is paired with an active public Radar `WATCH` or `HOT` signal.
+- 产品显示剩余额度，不显示已用额度。
+- Codex `LIVE` 数据来自本机官方 app-server 的 `account/rateLimits/read`。`rateLimitsByLimitId` 返回的模型专用额度同样属于账户真实数据。
+- Codex rollout JSONL 只作为 `STALE` 降级数据；已经过期的额度不能显示。
+- Claude 根据 Provider 的降级规则显示实时、缓存、估算或不可用状态。
+- Antigravity 优先使用真实的本地 quota-summary 数据，不能用模拟 Gemini 数据占位。
+- Codex Radar 等公共情报必须与账户额度明显分开。它可以标注 Codex，但不能改变用户的本地百分比或重置时间。
+- Radar 概率是中性信息，不能套用账户额度的红黄绿阈值。只有值得关注或强信号才使用黄色、红色强调。
+- Radar 的界面状态必须明确。使用 `暂无重置信号`、`值得关注`、`强重置信号`、`数据超2小时未更新`、`情报离线`，不能使用 `QUIET` 或 `情报已过期` 等歧义文案。
+- `本机已确认重置` 是关联结论。只有新的本地 Codex 额度跃升与正在生效的 Radar `WATCH` 或 `HOT` 信号同时出现时才能显示。
 
-## Verification gates
+## 验证门槛
 
-CI verifies:
+CI 负责验证以下项目。
 
-- core parser tests
-- app compilation
-- Universal Binary build (`arm64` + `x86_64`)
-- bundle code-signature verification
+- 核心解析器测试。
+- App 编译。
+- `arm64` 与 `x86_64` 通用二进制。
+- App bundle 签名完整性。
 
-CI does **not** prove visual quality or interaction feel. After material UI changes, perform one local macOS pass covering:
+CI 不能证明视觉质量和交互手感。重要界面修改后，需要在真实 macOS 中完成以下检查。
 
-1. right-side dock
-2. left-side dock
-3. Claude → Codex → Antigravity hover sweep; side-card size must remain unchanged
-4. when Codex returns model-specific buckets, verify all four quota rows are readable and correctly labeled
-5. confirm the compact Codex side card shows the Radar badge without crowding the LIVE/STALE indicator
-6. confirm the full Codex panel visibly shows `RESET RADAR` with an explicit localized state; quiet state must read `暂无重置信号` / `NO RESET SIGNAL`, not `QUIET`
-7. confirm Radar remains visible/independent when Codex account truth is unavailable
-8. side card → pill pointer movement without collapse
-9. menu-bar panel → Settings → back; footprint must remain stable
-10. Chinese / English / Follow System
-11. auto-collapse and always-expanded modes
-12. if Radar is stale/offline: Codex account quota remains unchanged and keeps its own LIVE/STALE semantics
-13. if local reset confirmation appears, verify a concurrent Radar WATCH/HOT signal exists
+1. 右侧停靠。
+2. 左侧停靠。
+3. 连续悬停 Claude、Codex、Antigravity，详情卡片尺寸不能变化。
+4. Codex 返回模型专用额度时，四条额度都能完整阅读，名称正确。
+5. Codex 详情卡片能够显示 Radar 标记，不挤压 `LIVE` 或 `STALE` 状态。
+6. Codex 完整面板显示 `RESET RADAR` 和明确的本地化状态。平静状态使用 `暂无重置信号` 或 `NO RESET SIGNAL`，不能显示 `QUIET`。
+7. Codex 账户数据不可用时，Radar 仍然独立可见。
+8. 鼠标从详情卡片移回侧栏时不会导致侧栏提前收起。
+9. 从菜单栏面板进入设置再返回，窗口尺寸保持稳定。
+10. 分别验证简体中文、English 和跟随系统。
+11. 分别验证自动收起和常驻展开。
+12. Radar 数据超时或离线时，Codex 账户额度不受影响，并保留自己的 `LIVE` 或 `STALE` 语义。
+13. 出现本机重置确认时，必须同时存在 Radar `WATCH` 或 `HOT` 信号。
 
-A UI change is considered complete only after both CI and this local interaction pass succeed.
+CI 和本机交互验收都通过，重要界面修改才算完成。
 
-## Instrument Console redesign — 2026-08-31
+## Instrument Console 改版记录 2026-08-31
 
-- Selected source: `docs/design-qa/instrument-console-reference.png`
-- Implemented full Codex panel: `docs/design-qa/instrument-console-codex.png`
-- Implemented settings: `docs/design-qa/instrument-console-settings.png`
-- Implemented four-lane side detail: `docs/design-qa/instrument-console-side-antigravity.png`
-- Implemented four-item edge rail with reserved bleed: `docs/design-qa/instrument-console-edge-radar.png`
+验收图片保存在以下位置。
 
-Comparison history:
+- 选定设计稿 `docs/design-qa/instrument-console-reference.png`
+- Codex 完整面板 `docs/design-qa/instrument-console-codex.png`
+- 设置页面 `docs/design-qa/instrument-console-settings.png`
+- Antigravity 四额度详情 `docs/design-qa/instrument-console-side-antigravity.png`
+- 带 Radar 的四模块侧栏 `docs/design-qa/instrument-console-edge-radar.png`
 
-1. The selected Instrument Console hierarchy was retained: toolbar, equal-width provider selector, Account Truth, and a separate Public Intelligence surface.
-2. The generated reference's large permanent rail was intentionally rejected. The production edge rail remains a compact three-ring monitor and was reduced from `74 × 344` to a visible `62 × 288`; its ring diameter is now 39 points. Enabling the optional fourth Radar module expands visible height only to `62 × 328`. Its curve begins after the 40-point content safety zone, while a separate 6-point off-screen bleed prevents seams without clipping the visible top/bottom endpoints.
-3. Settings replaced low-contrast menu pickers and ambiguous white switches with visible segmented controls and explicit ON/OFF labels. Simplified Chinese, English, and Follow System were exercised in the running app.
-4. Antigravity now exposes Gemini 5-hour/weekly and Claude/GPT 5-hour/weekly. The fixed hover card grew from 204 to 228 points only after the four-lane screenshot revealed inadequate bottom safety space.
-5. Optional Radar pinning adds a fourth compact rail module; disabled remains the default, preserving the small three-row footprint and Codex's tiny Radar status dot.
-6. Right and left docking, center reset, auto-collapse handle, provider hover, Radar independence, progressive refresh, and real local Codex app-server data were exercised in the built macOS app.
-7. The provider selector and settings segments now use full-size hit regions with hover/press feedback. Numeric quota and probability labels use system monospaced digits to prevent horizontal jitter.
-8. Radar probabilities now use a neutral ring/value treatment; only watch/strong states introduce yellow/red urgency. Constrained Radar copy is authored as complete sentences with a `查看完整` link, and the integrated pointer was narrowed for a cleaner silhouette.
+本轮对照结果如下。
 
-Final result: passed.
+1. 保留 Instrument Console 的信息层级，包括工具栏、等宽 Provider 选择器、账户真实额度和独立公共情报区。
+2. 没有采用设计稿里长期占空间的大侧栏。正式侧栏保留紧凑的三环监视器，可见尺寸从 `74 × 344` 缩小到 `62 × 288`，环直径为 39 点。可选 Radar 模块开启后，可见高度才增加到 `62 × 328`。曲线从 40 点内容安全区以外开始，另有 6 点伸出屏幕用于消除接缝，不会裁掉上下端点。
+3. 设置页面去掉低对比度菜单和含义不清的白色开关，改为可见分段控件和明确的开关状态。运行中的 App 已验证简体中文、English 与跟随系统。
+4. Antigravity 现在显示 Gemini 5 小时、Gemini 每周、Claude/GPT 5 小时和 Claude/GPT 每周。四条额度截图暴露底部空间不足后，固定详情卡片高度从 204 点调整到 228 点。
+5. Radar 可选固定为第四个侧栏模块，默认关闭。关闭时保留三行小体积，并在 Codex 百分比旁显示一个很小的 Radar 状态点。
+6. 已在构建后的 macOS App 中验证左右停靠、居中复位、自动收起把手、Provider 悬停、Radar 独立性、渐进刷新和真实 Codex app-server 数据。
+7. Provider 选择器和设置分段控件现在拥有完整点击区、悬停与按压反馈。数字使用系统等宽字形。
+8. Radar 概率采用中性环形与数值颜色。只有值得关注和强信号使用黄色或红色。受限空间内的说明使用完整句子，并提供 `查看完整`；卡片指针也已收窄。
+
+本轮结果通过。

@@ -1,196 +1,163 @@
 # CaliphBar
 
-CaliphBar is a lightweight macOS menu-bar monitor for AI coding-tool quota usage. It keeps a draggable edge-docked pill on screen, opens custom `NSPanel` detail surfaces, and supports Chinese/English UI with a system-language default.
+CaliphBar 是一款轻量的 macOS 菜单栏应用，用来查看 Claude Code、Codex 和 Antigravity 的额度与重置时间。它可以将一条小型侧栏常驻在屏幕边缘，也可从菜单栏打开完整管理面板。
 
-## Current scope
+> 当前仓库为私有项目。GitHub Release 只对已授权的仓库成员可见。
 
-- **Claude Code** — exact account usage from Anthropic's OAuth usage endpoint when Claude Code credentials are available. Background Keychain reads are non-interactive. If exact usage is temporarily unavailable, CaliphBar prefers a recent last-known-good live snapshot; only then does it fall back to a clearly labeled cost-weighted estimate from local Claude JSONL logs.
-- **Codex CLI** — prefers the official local Codex `app-server` JSON-RPC method `account/rateLimits/read` for current quota. Local rollout JSONL remains a fallback only; expired rollout windows are never labeled `LIVE`. No quota estimation and no direct private ChatGPT backend call.
-- **Antigravity** — reads real quota summary data from the local Antigravity 2.x `language_server` while the desktop app is running. A signed-in, already-running `agy` CLI process is also supported as a local fallback. CaliphBar does not scrape the Antigravity UI and does not call Google's remote OAuth quota endpoints.
-- **Codex Radar public intelligence** — polls the public structured summary separately from account truth, exposes a compact Radar signal, deduplicates meaningful reset-signal notifications, and can correlate a public event with a large real local Codex quota reset without uploading private quota history.
+## 下载与安装
 
-## UI and interaction
+从仓库的 [Releases](https://github.com/42zhangjing/Caliph-Bar/releases) 页面下载最新的 `CaliphBar-v*-macOS-universal.zip`。压缩包同时支持 Apple Silicon 和 Intel Mac，系统要求为 macOS 13 或更高版本。
 
-- smaller draggable floating edge pill with provider rings; the default three-row rail is `62 × 288` points and the optional four-row Radar layout is `62 × 328`
-- continuous custom Bezier silhouette that docks flush to the physical left/right display edge
-- remembers vertical position and dock side
-- optional hover-to-expand mode
-- provider hover switches the compact detail card and glides its pointer to the active row
-- compact side detail card uses one stable outer size across providers
-- full menu-bar panel with equal-width provider tabs and aligned Settings controls
-- custom transparent `NSPanel` surfaces, not `NSPopover`
-- session/weekly bars with reset times
-- `LIVE`, `STALE`, `ESTIMATED`, and `OFFLINE` source states
-- Chinese / English / Follow System language options
-- menu-bar percentage follows the current provider selection
-- Codex pill can show a separate Radar signal dot; the dot never changes the real account percentage
-- optional independent Radar rail module, explicit left/right docking, and a center-position reset
-- progressive provider refresh feedback instead of waiting for the slowest source before updating the UI
+1. 退出正在运行的 CaliphBar。
+2. 解压下载文件。
+3. 将旧的 `/Applications/CaliphBar.app` 移到废纸篓。
+4. 将新的 `CaliphBar.app` 拖入“应用程序”。
+5. 第一次启动时，右键应用并选择“打开”。
 
-## Other features
+更新时不需要清理偏好设置或缓存。新旧版本使用同一个 Bundle ID，替换 App 不会丢失语言、侧栏位置等设置。不要同时运行两份 CaliphBar。
 
-- one local notification per quota window after crossing the configured threshold
-- Codex Radar transition notifications for meaningful public reset-signal escalation
-- launch at login via `SMAppService`
-- 60-second account refresh plus manual refresh
-- 5-minute Codex Radar refresh with an independent cache
-- persisted last-known-good live account snapshots
-- Universal Binary build: Apple Silicon + Intel
-
-## Requirements
-
-- macOS 13+
-- Xcode or Xcode Command Line Tools
-- Claude Code, Codex CLI, and/or Antigravity installed and signed in on the Mac
-
-## Build
+当前测试包使用 ad-hoc 签名，尚未经过 Apple Developer ID 公证。如果 macOS 仍然拦截，可在确认文件来自本私有仓库后执行
 
 ```bash
+xattr -dr com.apple.quarantine /Applications/CaliphBar.app
+```
+
+## 当前功能
+
+### 额度数据
+
+- **Claude Code**  可用 Claude Code 凭据存在时，从 Anthropic OAuth usage 接口读取准确账户用量。后台 Keychain 读取不会弹出系统授权框。实时数据暂时不可用时，优先保留最近一次有效值，之后才使用本机 JSONL 日志估算，并明确标记为 `ESTIMATED`。
+- **Codex**  优先通过本机 Codex `app-server` 的 `account/rateLimits/read` 读取当前额度。本地 rollout JSONL 只是回退数据，过期窗口不会显示为 `LIVE`。CaliphBar 不估算 Codex 额度，也不直接调用 ChatGPT 私有后端。
+- **Antigravity**  从正在运行的 Antigravity 2.x 本机 `language_server` 读取真实 quota summary。也支持已登录且已运行的 `agy` 进程作为本机回退。应用不抓取 Antigravity UI，不调用 Google 远程 OAuth 额度接口。
+- **Reset Radar**  独立读取 Codex Radar 公共结构化摘要，显示额外重置信号和 24/48 小时概率。它属于公共情报，不会改动或冒充用户的真实 Codex 额度。
+
+### 界面与交互
+
+- 默认三项侧栏的可见尺寸为 `62 × 288` pt，开启独立 Radar 后为 `62 × 328` pt。
+- 侧栏是一条连续的自定义贝塞尔路径，可停靠在屏幕左侧或右侧。
+- 支持上下拖动、左右切换、恢复居中和自动收起。
+- 悬停在 Provider 上时显示固定尺寸的紧凑详情卡，切换时卡片不会跳动改变大小。
+- 菜单栏主面板使用等宽 Provider 切换和稳定尺寸。
+- 设置支持简体中文、English 和跟随系统。
+- 开关会同时显示开/关文字和颜色状态，不再只显示白色胶囊。
+- Provider 分别刷新并及时回填，不必等最慢的数据源。
+- 额度和概率数字使用系统等宽数字，数值变化时不会水平抖动。
+
+### 其他功能
+
+- 额度低于设定阈值时，每个窗口只通知一次。
+- Radar 只在信号明显升级时通知，避免重复打扰。
+- 支持开机启动。
+- 账户数据每 60 秒自动刷新，Radar 每 5 分钟独立刷新。
+- 保存最近一次可用的真实账户快照。
+- 生成同时包含 `arm64` 与 `x86_64` 的 Universal Binary。
+
+## 数据状态怎么理解
+
+- `LIVE`  当前数据源的实时读取。
+- `STALE`  实时读取失败后显示的较旧本机数据。
+- `ESTIMATED`  基于本地记录得出的估算值，不是账户的精确额度。
+- `OFFLINE`  暂时没有可用数据。
+- Radar 的“数据超 2 小时未更新”  表示 24/48 小时概率来自旧缓存，不表示重置机会已经错过。
+
+## 本地开发与安装
+
+需要 macOS 13 以及 Xcode 或 Xcode Command Line Tools。
+
+```bash
+swift test
 ./build-app.sh
 open CaliphBar.app
 ```
 
-The script creates an ad-hoc-signed Universal Binary with bundle identifier:
+`build-app.sh` 会生成 ad-hoc 签名的 Universal App，Bundle ID 为
 
 ```text
 dev.chengyu.caliphbar
 ```
 
-Install to Applications and launch:
+安装到“应用程序”并启动
 
 ```bash
 ./install.sh
 ```
 
-For Xcode development, open `Package.swift` in Xcode. This is a SwiftPM project; no generated `.xcodeproj` is required.
+该脚本会退出正在运行的 CaliphBar，将旧 App 移到废纸篓，再安装和打开新版。
 
-## Data sources
+生成 Release ZIP 和 SHA-256 校验文件
+
+```bash
+./package-release.sh
+```
+
+项目使用 SwiftPM，可在 Xcode 中直接打开 `Package.swift`，不需要生成 `.xcodeproj`。
+
+## 数据来源与安全边界
 
 ### Claude
 
-CaliphBar checks, in order:
-
-1. `~/.claude/.credentials.json`
-2. the macOS Keychain service `Claude Code-credentials` using a **non-interactive** background read
-3. `GET https://api.anthropic.com/api/oauth/usage`
-4. a recent cached live snapshot when a refresh fails
-5. local Claude transcript cost estimation only when no fresh live snapshot can be preserved
-
-If the Keychain item requires authorization, background refresh fails closed instead of presenting a surprise macOS permission prompt. Use **Settings → Repair Access** to explicitly request authorization.
-
-The estimator labels its result `ESTIMATED`; it is never presented as an exact quota reading.
+CaliphBar 依次检查 `~/.claude/.credentials.json`、macOS Keychain 中的 `Claude Code-credentials`、Anthropic usage 接口、最近的有效快照和本地 Claude 日志估算。后台读取不会主动弹出 Keychain 授权。如果需要授权，只有用户在设置中主动点击“修复权限”才会触发。
 
 ### Codex
 
-CaliphBar now prefers a fresh local query through the official Codex CLI process:
-
-```text
-codex -s read-only -a never app-server
-```
-
-It performs a bounded read-only JSON-RPC handshake and requests:
-
-```text
-account/rateLimits/read
-```
-
-The bundled alpha CLI may buffer JSONL stdout while stdin remains open, so CaliphBar closes the one-shot request input after the local snapshot has completed to flush the official response. The returned `rateLimits.primary` / `secondary` values are used for the current session and weekly lanes. This is a local subprocess interaction with the Codex CLI; CaliphBar does not read the Codex OAuth token and does not directly call a private ChatGPT HTTP endpoint.
-
-If the app-server query is unavailable, CaliphBar can inspect the newest `$CODEX_HOME/sessions/**/rollout-*.jsonl` or `~/.codex/sessions/**/rollout-*.jsonl` as a local fallback. Rollout data is historical observation data: a lane whose reset timestamp is already in the past is discarded, and any usable rollout fallback is labeled `STALE`, never `LIVE`.
-
-This distinction prevents an old pre-reset percentage from remaining on screen for hours after Codex has already reset.
+CaliphBar 使用只读、有时限的本机 JSON-RPC 交互请求 `account/rateLimits/read`。它不读取 Codex OAuth token，不尝试绕过或延长额度。当 app-server 不可用时，只会从本地 rollout JSONL 中寻找未过期的历史观测。
 
 ### Antigravity
 
-CaliphBar discovers the Antigravity desktop app's local `language_server` process, reads its CSRF token from the process command line, discovers loopback listening ports with `lsof`, and requests:
+CaliphBar 只连接字面地址 `127.0.0.1` 或 `localhost` 的 Antigravity 本机服务。自签名 TLS 信任放宽不会被应用到远程主机。日志和问题报告中不得出现 CSRF token 或凭据。
 
-```text
-POST https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary
-```
+### Reset Radar
 
-The local server uses a self-signed certificate. CaliphBar relaxes certificate trust **only** for literal `127.0.0.1` / `localhost` requests and never redirects that trust to a remote host.
-
-The preferred Antigravity 2.x quota summary contains two real quota families (`Gemini Models` and `Claude and GPT models`) with five-hour and weekly buckets. CaliphBar preserves all four real lanes in the main panel and fixed-size hover card. The compact rail headline uses the most constrained visible family so it still warns about the quota that will run out first.
-
-If the desktop app is unavailable, CaliphBar can reuse a signed-in `agy` process that is already running. It intentionally does not launch, own, or kill `agy` in this version. No Google OAuth token is read or stored by CaliphBar.
-
-### Codex Radar
-
-Codex Radar is not an account provider. The current personal build polls the public structured summary:
+当前版本每 5 分钟读取
 
 ```text
 https://codexradar.com/current.json
 ```
 
-on a separate five-minute timer and cache. Radar requests contain no Codex credentials and no local quota values. Internally, public Radar status/probability may create a `quiet`, `watch`, `hot`, `stale`, or `offline` signal, but the UI presents these as unambiguous phrases such as `NO RESET SIGNAL` / `暂无重置信号`. Radar probability uses neutral styling and never modifies or visually impersonates the user's real Codex percentage or normal reset timestamp.
+请求中不包含 Codex 凭据、本地额度或对话内容。Radar 缓存与账户额度快照完全分离。界面中的概率使用中性样式，只有“值得关注”和“强信号”状态会引入黄/红紧迫色。
 
-If CaliphBar observes a large real quota jump across a reset boundary, it can record a small local confirmation event and correlate it with Radar state. Only percentage/reset metadata is retained locally; it is never uploaded to Codex Radar.
+## 产品架构
 
-The richer `/api/v1/current` API is not used by the current implementation. Any future distributed/public integration should re-check the source's current terms and attribution requirements rather than assuming private/personal use automatically applies to distribution.
-
-## Product architecture
-
-CaliphBar deliberately separates two kinds of information:
+CaliphBar 始终分开两类信息。
 
 ```text
-Layer 1 — Account Truth
-real, user-specific quota and reset state
+第 1 层  账户真实数据
+用户自己的额度、数据源状态和重置时间
 
-Layer 2 — Public Intelligence
-community/public reset and model signals
+第 2 层  公共情报
+社区/公开重置信号和历史概率
 ```
 
-Public intelligence may add context and alerts, but it never modifies account-truth percentages or reset timestamps. See `docs/ARCHITECTURE.md`.
+公共情报可以增加背景和提醒，不能改写账户真实数据。详见 `docs/ARCHITECTURE.md`。
 
-## Project layout
+## 项目结构
 
 ```text
 Sources/
-  CaliphBarCore/
-    Models.swift
-    Provider.swift
-    JSONLReader.swift
-    Providers/
-      Claude/
-      Codex/
-      Antigravity/
-  CaliphBar/
-    App/
-    Services/
-    UI/
-Tests/
-  CaliphBarCoreTests/
-Resources/
-docs/
+  CaliphBarCore/       Provider 模型、解析和数据获取
+  CaliphBar/           App 状态、服务和 UI
+Tests/                 核心解析与模型测试
+Resources/             图标与资源
+docs/                  架构、维护、发布与 Radar 文档
 ```
 
-Adding an account provider is intentionally small: implement `UsageProvider`, return the common `ProviderFetchResult`, then add the provider ID and its brand asset. Provider-specific fetching stays out of the shared UI. Public-intelligence sources use a separate model/cache path rather than pretending to be account providers.
+## 维护文档
 
-## Maintainer / agent documentation
+- `AGENTS.md`  AI Agent 和人类维护者都必须遵守的工作约定
+- `docs/ARCHITECTURE.md`  产品与数据层架构
+- `docs/MAINTENANCE.md`  跨 Agent 维护、调试与本机安装流程
+- `docs/RELEASE.md`  构建、打包和 Release 检查清单
+- `docs/CODEX_RADAR_INTELLIGENCE.md`  Reset Radar 公共情报架构
+- `design-qa.md`  持久的 UI 与交互回归检查清单
 
-GitHub is the durable source of truth for CaliphBar. New agents and new chats should restore context from the repository rather than relying on conversation memory.
+GitHub `main` 是项目唯一可信的持久状态。新对话或新 Agent 应从仓库恢复上下文，不要把聊天记忆当作当前代码。
 
-- `AGENTS.md` — mandatory handoff/workflow rules for AI agents and human maintainers
-- `docs/ARCHITECTURE.md` — product/data-layer architecture
-- `docs/MAINTENANCE.md` — cross-agent maintenance and local-install workflow
-- `docs/RELEASE.md` — build/release checklist
-- `docs/CODEX_RADAR_INTELLIGENCE.md` — Codex Radar public-intelligence architecture
-- `design-qa.md` — durable UI and interaction regression checklist
+## 隐私
 
-## Privacy
+CaliphBar 是本地优先应用。Claude 凭据只会发往 Anthropic 自己的 usage 接口；Codex 额度通过本地 CLI app-server 查询；Antigravity 通过回环地址读取；Radar 只执行普通的公共数据 GET 请求。应用不运行 CaliphBar 后端，不上传对话、凭据、额度历史或使用记录。
 
-CaliphBar is local-first. It reads local files already written by Claude Code and Codex CLI. For exact Claude usage it sends the existing Claude OAuth token only to Anthropic's own usage endpoint. Codex live quota is queried through the local Codex CLI app-server. Antigravity usage is read from Antigravity's loopback-only local service. Codex Radar receives only ordinary public-summary GET requests; CaliphBar does not upload private quota data, transcripts, credentials, or usage history to it. CaliphBar does not run a server or send usage data to CaliphBar infrastructure.
+不要在 issue、日志、截图或聊天中粘贴 credential 文件、Keychain 值、OAuth token、cookie、CSRF token 或 API key。
 
-Never publish or paste your credential files, Keychain values, OAuth tokens, cookies, CSRF tokens, or API keys into bug reports.
+## 开源与签名说明
 
-## UI QA
-
-See `design-qa.md` for the interaction/visual regression checklist. CI validates compilation, tests, Universal Binary output, and code-signature verification; visual feel still requires a local macOS pass after material UI changes.
-
-## Notes on development signing
-
-`build-app.sh` uses ad-hoc signing so local builds have a consistent app bundle identity. macOS Keychain grants are still sensitive to code-signature identity, and Claude Code can recreate its foreign Keychain item after updates. A future public release should use a stable Developer ID signature and notarization.
-
-## License
-
-MIT. See `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+项目当前保留 MIT `LICENSE` 和第三方声明，仓库可见性为 Private。`build-app.sh` 使用 ad-hoc 签名保持稳定 Bundle ID。如需无警告的公开发行，还需要稳定的 Apple Developer ID 签名和公证。

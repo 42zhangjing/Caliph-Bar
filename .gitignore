@@ -4,3 +4,4 @@
 DerivedData/
 CaliphBar.app/
 *.dSYM/
+dist/
