@@ -10,7 +10,17 @@ struct SnapshotCache {
         else { return [:] }
         return Dictionary(uniqueKeysWithValues: decoded.compactMap { entry in
             guard let id = ProviderID(rawValue: entry.key) else { return nil }
-            return (id, entry.value)
+            let snapshot = entry.value
+
+            // Before the app-server migration, rollout JSONL snapshots were incorrectly persisted
+            // as LIVE. Do not let those legacy cache entries survive as "Last live reading" after
+            // upgrading; current Codex LIVE truth must come from account/rateLimits/read.
+            if id == .codex,
+               snapshot.sourceDetail == "Codex rollout rate_limits"
+            {
+                return nil
+            }
+            return (id, snapshot)
         })
     }
 

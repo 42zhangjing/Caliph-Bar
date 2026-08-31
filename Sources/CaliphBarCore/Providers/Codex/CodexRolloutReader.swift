@@ -3,21 +3,27 @@ import Foundation
 public struct CodexRateLimits: Equatable, Sendable {
     public let primaryPercent: Double
     public let primaryResetsAt: Date?
+    public let primaryWindowMinutes: Double?
     public let secondaryPercent: Double?
     public let secondaryResetsAt: Date?
+    public let secondaryWindowMinutes: Double?
     public let planType: String?
 
     public init(
         primaryPercent: Double,
         primaryResetsAt: Date?,
+        primaryWindowMinutes: Double? = nil,
         secondaryPercent: Double?,
         secondaryResetsAt: Date?,
+        secondaryWindowMinutes: Double? = nil,
         planType: String?
     ) {
         self.primaryPercent = primaryPercent
         self.primaryResetsAt = primaryResetsAt
+        self.primaryWindowMinutes = primaryWindowMinutes
         self.secondaryPercent = secondaryPercent
         self.secondaryResetsAt = secondaryResetsAt
+        self.secondaryWindowMinutes = secondaryWindowMinutes
         self.planType = planType
     }
 }
@@ -35,8 +41,10 @@ public enum CodexRateLimitParser {
         return CodexRateLimits(
             primaryPercent: primaryPercent,
             primaryResetsAt: date(primary["resets_at"]),
+            primaryWindowMinutes: number(primary["window_duration_mins"] ?? primary["window_minutes"]),
             secondaryPercent: number(secondary?["used_percent"]),
             secondaryResetsAt: date(secondary?["resets_at"]),
+            secondaryWindowMinutes: number(secondary?["window_duration_mins"] ?? secondary?["window_minutes"]),
             planType: rateLimits["plan_type"] as? String
         )
     }

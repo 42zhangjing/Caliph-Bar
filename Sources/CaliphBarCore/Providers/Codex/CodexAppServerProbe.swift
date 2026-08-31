@@ -11,7 +11,7 @@ struct CodexAppServerProbe: Sendable {
         defer { session.shutdown() }
 
         try await session.initialize()
-        let message = try await session.request(method: "account/rateLimits/read", timeout: 4.0)
+        let message = try await session.request(method: "account/rateLimits/read", timeout: 10.0)
         guard let limits = CodexAppServerRateLimitParser.parse(message: message) else {
             throw CodexAppServerError.invalidPayload("missing rateLimits.primary.usedPercent")
         }
@@ -31,8 +31,10 @@ enum CodexAppServerRateLimitParser {
         return CodexRateLimits(
             primaryPercent: primaryPercent,
             primaryResetsAt: date(primary["resetsAt"] ?? primary["resets_at"]),
+            primaryWindowMinutes: number(primary["windowDurationMins"] ?? primary["window_duration_mins"]),
             secondaryPercent: number(secondary?["usedPercent"] ?? secondary?["used_percent"]),
             secondaryResetsAt: date(secondary?["resetsAt"] ?? secondary?["resets_at"]),
+            secondaryWindowMinutes: number(secondary?["windowDurationMins"] ?? secondary?["window_duration_mins"]),
             planType: string(rateLimits["planType"] ?? rateLimits["plan_type"])
         )
     }
@@ -100,8 +102,11 @@ private final class CodexRPCSession: @unchecked Sendable {
     func initialize() async throws {
         _ = try await request(
             method: "initialize",
-            params: ["clientInfo": ["name": "caliphbar", "version": "0.2"]],
-            timeout: 8.0
+            params: ["clientInfo": ["name": "caliphbar", "title": "CaliphBar", "version": "0.2"]],
+            // Codex Desktop itself allows roughly 30 seconds for the app-server handshake.
+            // Real installations with substantial local state / MCP configuration can exceed
+            // the previous 8-second CaliphBar deadline even though the server is healthy.
+            timeout: 30.0
         )
         try sendNotification(method: "initialized")
     }
