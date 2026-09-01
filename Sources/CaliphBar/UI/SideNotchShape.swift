@@ -20,8 +20,45 @@ enum SideNotchLayout {
     /// Width is always derived from height so no view state can stretch the curve.
     static let canonicalAspectRatio: CGFloat = 210 / 1138
 
-    static func windowSize(radarPinned: Bool) -> CGSize {
-        radarPinned ? radarWindowSize : compactWindowSize
+    static let silhouetteCollapsedHeight: CGFloat = collapsedHeight * 2
+    static let silhouetteExpandedHeight: CGFloat = 360
+    static let silhouetteAspectRatio: CGFloat = 600.0 / 1864.0
+    static let silhouetteCollapsedWidth: CGFloat = silhouetteCollapsedHeight * silhouetteAspectRatio
+    static let silhouetteExpandedWidth: CGFloat = silhouetteExpandedHeight * silhouetteAspectRatio
+    static let silhouetteRingSize: CGFloat = 22
+    static let silhouettePercentageFontSize: CGFloat = 8
+
+    /// Normalized anchors on the silhouette bounding box (top-left is (0,0), bottom-right is (1,1))
+    static let claudeAnchor = CGPoint(x: 0.611, y: 0.103)      // Head
+    static let codexAnchor = CGPoint(x: 0.362, y: 0.258)       // Chest
+    static let antigravityAnchor = CGPoint(x: 0.536, y: 0.419) // Hip
+    static let radarAnchor = CGPoint(x: 0.851, y: 0.668)       // Base
+
+    static func silhouetteAnchor(for provider: ProviderID) -> CGPoint {
+        switch provider {
+        case .claude: return claudeAnchor
+        case .codex: return codexAnchor
+        case .gemini: return antigravityAnchor
+        }
+    }
+
+    static func silhouettePoint(
+        normalized: CGPoint,
+        silhouetteSize: CGSize,
+        side: EdgeSide
+    ) -> CGPoint {
+        let x = side == .left ? (1.0 - normalized.x) * silhouetteSize.width : normalized.x * silhouetteSize.width
+        let y = normalized.y * silhouetteSize.height
+        return CGPoint(x: x, y: y)
+    }
+
+    static func windowSize(radarPinned: Bool, handleStyle: UsageStore.HandleStyle = .classic) -> CGSize {
+        let base = radarPinned ? radarWindowSize : compactWindowSize
+        guard handleStyle == .silhouette else { return base }
+        return CGSize(
+            width: max(base.width, silhouetteExpandedWidth + edgeBleed),
+            height: max(base.height, silhouetteExpandedHeight)
+        )
     }
 
     static func silhouetteWidth(forHeight height: CGFloat) -> CGFloat {

@@ -208,6 +208,18 @@ public final class L10n: ObservableObject {
         isChinese ? "暖瓷白" : "Warm Porcelain"
     }
 
+    public var handleStyleLabel: String {
+        isChinese ? "侧栏外观" : "Rail Appearance"
+    }
+
+    public var handleStyleClassic: String {
+        isChinese ? "经典弧形" : "Classic"
+    }
+
+    public var handleStyleSilhouette: String {
+        isChinese ? "优雅剪影" : "Silhouette"
+    }
+
     public var pinRadarModule: String {
         isChinese ? "侧栏独立显示 Radar" : "Pin Radar to Edge Rail"
     }

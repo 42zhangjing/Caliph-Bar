@@ -27,6 +27,19 @@ struct SettingsView: View {
                             }
                         }
                         divider
+                        segmentedRow(l10n.handleStyleLabel) {
+                            segment(l10n.handleStyleClassic, selected: store.handleStyle == .classic) {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    store.handleStyle = .classic
+                                }
+                            }
+                            segment(l10n.handleStyleSilhouette, selected: store.handleStyle == .silhouette) {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    store.handleStyle = .silhouette
+                                }
+                            }
+                        }
+                        divider
                         segmentedRow(l10n.edgeSideLabel) {
                             segment(l10n.edgeSideLeft, selected: store.pillSide == .left) {
                                 store.pillSide = .left
