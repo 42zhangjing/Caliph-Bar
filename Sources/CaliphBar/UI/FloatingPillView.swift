@@ -30,22 +30,45 @@ struct FloatingPillView: View {
         store.pillBehavior == .alwaysExpanded || position.isHovered
     }
 
+    private var shouldShowSilhouetteContent: Bool {
+        position.isHovered
+    }
+
     private var edgeAlignment: Alignment {
         position.side == .right ? .trailing : .leading
     }
 
     private var surfaceWidth: CGFloat {
-        if isExpanded { return windowSize.width }
-        return SideNotchLayout.silhouetteWidth(forHeight: SideNotchLayout.collapsedHeight)
-            + SideNotchLayout.edgeBleed
+        switch store.handleStyle {
+        case .classic:
+            if isExpanded { return expandedWindowSize.width }
+            return SideNotchLayout.silhouetteWidth(forHeight: SideNotchLayout.collapsedHeight)
+                + SideNotchLayout.edgeBleed
+        case .silhouette:
+            let w = isExpanded
+                ? SideNotchLayout.silhouetteExpandedWidth
+                : SideNotchLayout.silhouetteCollapsedWidth
+            return w + SideNotchLayout.edgeBleed
+        }
     }
 
     private var surfaceHeight: CGFloat {
-        isExpanded ? windowSize.height : SideNotchLayout.collapsedHeight
+        switch store.handleStyle {
+        case .classic:
+            return isExpanded ? expandedWindowSize.height : SideNotchLayout.collapsedHeight
+        case .silhouette:
+            return isExpanded
+                ? SideNotchLayout.silhouetteExpandedHeight
+                : SideNotchLayout.silhouetteCollapsedHeight
+        }
+    }
+
+    private var expandedWindowSize: CGSize {
+        SideNotchLayout.windowSize(radarPinned: store.radarPinned, handleStyle: .classic)
     }
 
     private var expandedSilhouetteWidth: CGFloat {
-        SideNotchLayout.silhouetteWidth(forHeight: windowSize.height)
+        SideNotchLayout.silhouetteWidth(forHeight: expandedWindowSize.height)
     }
 
     private var contentEdgeOffset: CGFloat {
@@ -53,14 +76,14 @@ struct FloatingPillView: View {
     }
 
     private var windowSize: CGSize {
-        SideNotchLayout.windowSize(radarPinned: store.radarPinned)
+        SideNotchLayout.windowSize(radarPinned: store.radarPinned, handleStyle: store.handleStyle)
     }
 
     var body: some View {
         ZStack(alignment: edgeAlignment) {
             pillSurface
                 .frame(width: surfaceWidth, height: surfaceHeight)
-                .contentShape(EdgePillShape(side: position.side))
+                .contentShape(Rectangle())
                 .simultaneousGesture(dragGesture)
         }
         .frame(
@@ -73,17 +96,48 @@ struct FloatingPillView: View {
 
     private var pillSurface: some View {
         ZStack(alignment: edgeAlignment) {
+            switch store.handleStyle {
+            case .classic:
+                classicSurface
+            case .silhouette:
+                silhouetteSurface
+            }
+        }
+    }
+
+    private var classicSurface: some View {
+        ZStack(alignment: edgeAlignment) {
             EdgePillShape(side: position.side)
                 .fill(Color.black)
 
             if isExpanded {
                 expandedContent
-                    .frame(width: expandedSilhouetteWidth, height: windowSize.height)
+                    .frame(width: expandedSilhouetteWidth, height: expandedWindowSize.height)
                     .offset(x: contentEdgeOffset)
                     .transition(
                         .move(edge: position.side == .right ? .trailing : .leading)
                             .combined(with: .opacity)
                     )
+            }
+        }
+    }
+
+    private var silhouetteSurface: some View {
+        let currentHeight = surfaceHeight
+        let currentWidth = surfaceWidth - SideNotchLayout.edgeBleed
+
+        return ZStack(alignment: edgeAlignment) {
+            SilhouetteShape(side: position.side)
+                .fill(Color.black, style: FillStyle(eoFill: true))
+
+            if shouldShowSilhouetteContent {
+                SilhouetteOverlayContent(
+                    store: store,
+                    position: position,
+                    silhouetteSize: CGSize(width: currentWidth, height: currentHeight)
+                )
+                .offset(x: contentEdgeOffset)
+                .transition(.opacity)
             }
         }
     }
@@ -116,6 +170,159 @@ struct FloatingPillView: View {
             .onEnded { value in
                 position.onDragEnded?(value.translation)
             }
+    }
+}
+
+private struct SilhouetteOverlayContent: View {
+    @ObservedObject var store: UsageStore
+    @ObservedObject var position: PillPositionModel
+    let silhouetteSize: CGSize
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(ProviderID.allCases, id: \.self) { provider in
+                let norm = SideNotchLayout.silhouetteAnchor(for: provider)
+                let pt = SideNotchLayout.silhouettePoint(
+                    normalized: norm,
+                    silhouetteSize: silhouetteSize,
+                    side: position.side
+                )
+                SilhouetteProviderNode(
+                    provider: provider,
+                    snapshot: store.item(for: provider),
+                    coreStyle: store.ringCoreStyle,
+                    action: {
+                        position.onProviderTapped?(provider)
+                    }
+                )
+                .position(x: pt.x, y: pt.y)
+            }
+
+            if store.radarPinned {
+                let norm = SideNotchLayout.radarAnchor
+                let pt = SideNotchLayout.silhouettePoint(
+                    normalized: norm,
+                    silhouetteSize: silhouetteSize,
+                    side: position.side
+                )
+                SilhouetteRadarNode(coreStyle: store.ringCoreStyle) {
+                    position.onRadarTapped?()
+                }
+                .position(x: pt.x, y: pt.y)
+            }
+        }
+        .frame(width: silhouetteSize.width, height: silhouetteSize.height)
+    }
+}
+
+private struct SilhouetteProviderNode: View {
+    let provider: ProviderID
+    let snapshot: ProviderSnapshot?
+    let coreStyle: RingCoreStyle
+    let action: () -> Void
+
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        let remaining = snapshot?.headlineRemainingFraction
+        Button(action: action) {
+            VStack(spacing: 1) {
+                RingView(
+                    provider: provider,
+                    remainingFraction: remaining,
+                    size: SideNotchLayout.silhouetteRingSize,
+                    coreStyle: coreStyle
+                )
+
+                Text(percentageLabel(for: remaining))
+                    .font(.system(size: SideNotchLayout.silhouettePercentageFontSize, weight: .bold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(
+                        remaining.map(StatusColor.valueColor(for:)) ?? .white.opacity(0.28)
+                    )
+                    .frame(height: 10)
+            }
+            .frame(width: 32, height: 34)
+        }
+        .buttonStyle(PillItemButtonStyle())
+        .help(provider == .codex ? "\(provider.displayName) · \(radarHelp)" : provider.displayName)
+    }
+
+    private func percentageLabel(for remaining: Double?) -> String {
+        guard let remaining else { return "—" }
+        return StatusColor.percentageText(for: remaining)
+    }
+
+    private var radarHelp: String {
+        let signal = "Radar " + CodexRadarPresentation.statusLabel(
+            for: radar.signal,
+            isChinese: l10n.isChinese,
+            compact: true
+        )
+        if let probability = radar.snapshot?.probability24h {
+            return "\(signal) · 24h \(Int((probability * 100).rounded()))%"
+        }
+        return signal
+    }
+}
+
+private struct SilhouetteRadarNode: View {
+    let coreStyle: RingCoreStyle
+    let action: () -> Void
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 1) {
+                ZStack {
+                    Circle()
+                        .fill(coreStyle.fillStyle)
+                        .padding(coreStyle.inset * 0.7)
+                    if coreStyle == .porcelain {
+                        Circle()
+                            .stroke(coreStyle.separatorColor, lineWidth: 0.5)
+                            .padding(coreStyle.inset * 0.7)
+                    }
+                    Circle()
+                        .stroke(Color.white.opacity(0.14), lineWidth: 1.5)
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(coreStyle.radarBrandColor)
+                }
+                .frame(width: SideNotchLayout.silhouetteRingSize, height: SideNotchLayout.silhouetteRingSize)
+
+                Text(probabilityLabel)
+                    .font(.system(size: SideNotchLayout.silhouettePercentageFontSize, weight: .bold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(probabilityColor)
+                    .frame(height: 10)
+            }
+            .frame(width: 32, height: 34)
+        }
+        .buttonStyle(PillItemButtonStyle())
+        .accessibilityLabel("Reset Radar")
+        .accessibilityValue(accessibilityValue)
+        .help(l10n.isChinese ? "Codex Reset Radar 公共情报" : "Codex Reset Radar public intelligence")
+    }
+
+    private var probabilityLabel: String {
+        guard let value = radar.snapshot?.probability24h else { return "RADAR" }
+        return "\(Int((value * 100).rounded()))%"
+    }
+
+    private var probabilityColor: Color {
+        .white.opacity(0.78)
+    }
+
+    private var accessibilityValue: String {
+        let state = CodexRadarPresentation.statusLabel(
+            for: radar.signal,
+            isChinese: l10n.isChinese
+        )
+        guard radar.snapshot?.probability24h != nil else { return state }
+        return "\(state), 24H \(probabilityLabel)"
     }
 }
 
@@ -172,7 +379,6 @@ private struct RadarPillButton: View {
         guard radar.snapshot?.probability24h != nil else { return state }
         return "\(state), 24H \(probabilityLabel)"
     }
-
 }
 
 private struct ProviderPillButton: View {
@@ -216,8 +422,7 @@ private struct ProviderPillButton: View {
     }
 
     private var radarHelp: String {
-        let signal: String
-        signal = "Radar " + CodexRadarPresentation.statusLabel(
+        let signal = "Radar " + CodexRadarPresentation.statusLabel(
             for: radar.signal,
             isChinese: l10n.isChinese,
             compact: true

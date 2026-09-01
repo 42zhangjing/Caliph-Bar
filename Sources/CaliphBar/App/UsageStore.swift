@@ -41,6 +41,10 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(ringCoreStyle.rawValue, forKey: Keys.ringCoreStyle) }
     }
 
+    @Published var handleStyle: HandleStyle {
+        didSet { UserDefaults.standard.set(handleStyle.rawValue, forKey: Keys.handleStyle) }
+    }
+
     @Published var claudeSessionBudget: Double {
         didSet { UserDefaults.standard.set(claudeSessionBudget, forKey: Keys.sessionBudget) }
     }
@@ -56,6 +60,13 @@ final class UsageStore: ObservableObject {
         public var id: String { rawValue }
     }
 
+    public enum HandleStyle: String, CaseIterable, Identifiable {
+        case classic = "classic"
+        case silhouette = "silhouette"
+
+        public var id: String { rawValue }
+    }
+
     private enum Keys {
         static let notifications = "caliphbar.notificationsEnabled"
         static let pillVisible = "caliphbar.pillVisible"
@@ -63,6 +74,7 @@ final class UsageStore: ObservableObject {
         static let pillSide = "caliphbar.pillSide"
         static let radarPinned = "caliphbar.radarPinned"
         static let ringCoreStyle = "caliphbar.ringCoreStyle"
+        static let handleStyle = "caliphbar.handleStyle"
         static let sessionBudget = "caliphbar.claudeSessionBudget"
         static let weeklyBudget = "caliphbar.claudeWeeklyBudget"
     }
@@ -82,6 +94,8 @@ final class UsageStore: ObservableObject {
         radarPinned = defaults.object(forKey: Keys.radarPinned) as? Bool ?? false
         ringCoreStyle = defaults.string(forKey: Keys.ringCoreStyle)
             .flatMap(RingCoreStyle.init(rawValue:)) ?? .dark
+        let handleStyleRaw = defaults.string(forKey: Keys.handleStyle) ?? HandleStyle.classic.rawValue
+        handleStyle = HandleStyle(rawValue: handleStyleRaw) ?? .classic
         claudeSessionBudget = defaults.object(forKey: Keys.sessionBudget) as? Double ?? 40
         claudeWeeklyBudget = defaults.object(forKey: Keys.weeklyBudget) as? Double ?? 400
         launchAtLogin = LaunchAtLogin.isEnabled

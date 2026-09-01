@@ -101,6 +101,15 @@ final class FloatingPillWindow: NSObject {
             }
             .store(in: &cancellables)
 
+        store.$handleStyle
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.updateWindowFrame(animated: true)
+            }
+            .store(in: &cancellables)
+
         store.$radarPinned
             .dropFirst()
             .removeDuplicates()
@@ -149,7 +158,7 @@ final class FloatingPillWindow: NSObject {
     }
 
     private var windowSize: NSSize {
-        let size = SideNotchLayout.windowSize(radarPinned: store.radarPinned)
+        let size = SideNotchLayout.windowSize(radarPinned: store.radarPinned, handleStyle: store.handleStyle)
         return NSSize(width: size.width, height: size.height)
     }
 
@@ -197,12 +206,21 @@ final class FloatingPillWindow: NSObject {
             let screen = panel.screen ?? screenContainingPanel() ?? NSScreen.main
         else { return }
 
-        let centerFromTop = SideNotchLayout.providerCenterYFromTop(
-            index: index,
-            providerCount: moduleCount,
-            height: windowSize.height
-        )
-        let centerY = panel.frame.maxY - centerFromTop
+        let centerY: CGFloat
+        if store.handleStyle == .silhouette {
+            let norm = SideNotchLayout.silhouetteAnchor(for: provider)
+            let silHeight = SideNotchLayout.silhouetteExpandedHeight
+            let topY = panel.frame.midY + silHeight / 2
+            centerY = topY - norm.y * silHeight
+        } else {
+            let centerFromTop = SideNotchLayout.providerCenterYFromTop(
+                index: index,
+                providerCount: moduleCount,
+                height: windowSize.height
+            )
+            centerY = panel.frame.maxY - centerFromTop
+        }
+
         let anchor = NSRect(
             x: panel.frame.minX,
             y: centerY - SideNotchLayout.itemSize.height / 2,
@@ -224,12 +242,21 @@ final class FloatingPillWindow: NSObject {
               let screen = panel.screen ?? screenContainingPanel() ?? NSScreen.main
         else { return }
 
-        let centerFromTop = SideNotchLayout.providerCenterYFromTop(
-            index: ProviderID.allCases.count,
-            providerCount: moduleCount,
-            height: windowSize.height
-        )
-        let centerY = panel.frame.maxY - centerFromTop
+        let centerY: CGFloat
+        if store.handleStyle == .silhouette {
+            let norm = SideNotchLayout.radarAnchor
+            let silHeight = SideNotchLayout.silhouetteExpandedHeight
+            let topY = panel.frame.midY + silHeight / 2
+            centerY = topY - norm.y * silHeight
+        } else {
+            let centerFromTop = SideNotchLayout.providerCenterYFromTop(
+                index: ProviderID.allCases.count,
+                providerCount: moduleCount,
+                height: windowSize.height
+            )
+            centerY = panel.frame.maxY - centerFromTop
+        }
+
         let anchor = NSRect(
             x: panel.frame.minX,
             y: centerY - SideNotchLayout.itemSize.height / 2,
@@ -325,7 +352,7 @@ final class FloatingPillWindow: NSObject {
             hoverCollapseWorkItem?.cancel()
             hoverCollapseWorkItem = nil
 
-            if store.pillBehavior == .autoCollapse && !position.isHovered {
+            if !position.isHovered {
                 withAnimation(.interpolatingSpring(stiffness: 280, damping: 24)) {
                     position.isHovered = true
                 }
@@ -350,7 +377,7 @@ final class FloatingPillWindow: NSObject {
             onPillMouseExited?()
         }
 
-        guard store.pillBehavior == .autoCollapse, position.isHovered, hoverCollapseWorkItem == nil else { return }
+        guard position.isHovered, hoverCollapseWorkItem == nil else { return }
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -361,9 +388,6 @@ final class FloatingPillWindow: NSObject {
                 withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
                     self.position.isHovered = false
                 }
-                // The detail panel may have skipped its first dismissal while
-                // this window still exposed the expanded hover frame. Re-arm
-                // dismissal after the hit region actually becomes compact.
                 self.onPillMouseExited?()
             }
         }
@@ -379,8 +403,12 @@ final class FloatingPillWindow: NSObject {
         // The collapsed visual is intentionally tiny, but its hover target is
         // slightly larger so it remains easy to reveal without creating a huge
         // invisible window-wide hit area.
-        let width: CGFloat = 30
-        let height: CGFloat = 104
+        let width: CGFloat = store.handleStyle == .silhouette
+            ? (SideNotchLayout.silhouetteCollapsedWidth + SideNotchLayout.edgeBleed)
+            : 30
+        let height: CGFloat = store.handleStyle == .silhouette
+            ? SideNotchLayout.silhouetteCollapsedHeight
+            : 104
         let x = position.side == .right ? panel.frame.maxX - width : panel.frame.minX
         return NSRect(
             x: x,
@@ -391,6 +419,34 @@ final class FloatingPillWindow: NSObject {
     }
 
     private func provider(at point: NSPoint) -> ProviderID? {
+        if store.handleStyle == .silhouette {
+            let silHeight = SideNotchLayout.silhouetteExpandedHeight
+            let silWidth = SideNotchLayout.silhouetteExpandedWidth
+            let topY = panel.frame.midY + silHeight / 2
+            let silMinX = position.side == .right
+                ? panel.frame.maxX - SideNotchLayout.edgeBleed - silWidth
+                : panel.frame.minX + SideNotchLayout.edgeBleed
+
+            var best: (provider: ProviderID, distance: CGFloat)?
+            for provider in ProviderID.allCases {
+                let norm = SideNotchLayout.silhouetteAnchor(for: provider)
+                let pt = SideNotchLayout.silhouettePoint(
+                    normalized: norm,
+                    silhouetteSize: CGSize(width: silWidth, height: silHeight),
+                    side: position.side
+                )
+                let screenNodeX = silMinX + pt.x
+                let screenNodeY = topY - pt.y
+                let distance = hypot(point.x - screenNodeX, point.y - screenNodeY)
+                if best == nil || distance < best!.distance {
+                    best = (provider, distance)
+                }
+            }
+
+            guard let best, best.distance <= 32 else { return nil }
+            return best.provider
+        }
+
         let localYFromTop = panel.frame.maxY - point.y
         let providers = ProviderID.allCases
         var best: (provider: ProviderID, distance: CGFloat)?
@@ -414,6 +470,26 @@ final class FloatingPillWindow: NSObject {
 
     private func radar(at point: NSPoint) -> Bool {
         guard store.radarPinned else { return false }
+        if store.handleStyle == .silhouette {
+            let silHeight = SideNotchLayout.silhouetteExpandedHeight
+            let silWidth = SideNotchLayout.silhouetteExpandedWidth
+            let topY = panel.frame.midY + silHeight / 2
+            let silMinX = position.side == .right
+                ? panel.frame.maxX - SideNotchLayout.edgeBleed - silWidth
+                : panel.frame.minX + SideNotchLayout.edgeBleed
+
+            let norm = SideNotchLayout.radarAnchor
+            let pt = SideNotchLayout.silhouettePoint(
+                normalized: norm,
+                silhouetteSize: CGSize(width: silWidth, height: silHeight),
+                side: position.side
+            )
+            let screenNodeX = silMinX + pt.x
+            let screenNodeY = topY - pt.y
+            let distance = hypot(point.x - screenNodeX, point.y - screenNodeY)
+            return distance <= 32
+        }
+
         let localYFromTop = panel.frame.maxY - point.y
         let centerY = SideNotchLayout.providerCenterYFromTop(
             index: ProviderID.allCases.count,
