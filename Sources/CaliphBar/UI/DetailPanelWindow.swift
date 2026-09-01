@@ -16,11 +16,15 @@ final class DetailPanelWindow {
     private let selection: SelectionModel
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var isAnimating = false
+    private var hoverGlobalMonitor: Any?
+    private var hoverLocalMonitor: Any?
     private var outsideClickExclusionFrame: NSRect?
     private var dismissWorkItem: DispatchWorkItem?
     private let shadowPadding: CGFloat = 16
     private var currentMode: PanelMode?
+    private var lastHoverEvaluation: CFTimeInterval = 0
+
+    var hoverExclusionFrame: (() -> NSRect?)?
 
     init(store: UsageStore, selection: SelectionModel) {
         self.store = store
@@ -37,6 +41,13 @@ final class DetailPanelWindow {
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
+    }
+
+    deinit {
+        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        if let hoverGlobalMonitor { NSEvent.removeMonitor(hoverGlobalMonitor) }
+        if let hoverLocalMonitor { NSEvent.removeMonitor(hoverLocalMonitor) }
     }
 
     var isShown: Bool { panel.isVisible && panel.alphaValue > 0.01 }
@@ -120,19 +131,19 @@ final class DetailPanelWindow {
             panel.alphaValue = 0
             panel.orderFrontRegardless()
 
-            isAnimating = true
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.22, 1.0)
                 panel.animator().alphaValue = 1.0
-            } completionHandler: { [weak self] in
-                Task { @MainActor in
-                    self?.isAnimating = false
-                }
             }
         }
 
         installOutsideClickMonitors()
+        if isMenuBarMode {
+            removeHoverMoveMonitors()
+        } else {
+            installHoverMoveMonitors()
+        }
     }
 
     private func preferredSize(for mode: PanelMode, hosting: NSViewController) -> NSSize {
@@ -187,14 +198,14 @@ final class DetailPanelWindow {
 
     func scheduleHoverDismiss(delay: TimeInterval = 0.32) {
         guard isShown, !isMenuBarMode else { return }
-        dismissWorkItem?.cancel()
+        guard dismissWorkItem == nil else { return }
 
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.dismissWorkItem = nil
                 let mouse = NSEvent.mouseLocation
-                if self.panel.frame.contains(mouse) || self.outsideClickExclusionFrame?.contains(mouse) == true {
+                if self.isInsideHoverRegion(mouse) {
                     return
                 }
                 self.hide()
@@ -212,21 +223,16 @@ final class DetailPanelWindow {
     func hide() {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
-        guard isShown, !isAnimating else { return }
+        guard panel.isVisible else { return }
         removeOutsideClickMonitors()
-        isAnimating = true
+        removeHoverMoveMonitors()
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.14
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                self.panel.orderOut(nil)
-                self.isAnimating = false
-            }
-        }
+        // Side panels must leave the WindowServer synchronously. Deferring
+        // orderOut until an alpha animation completes can strand the SwiftUI
+        // shadow layer until the next system input event.
+        panel.contentView?.layer?.removeAllAnimations()
+        panel.alphaValue = 0
+        panel.orderOut(nil)
     }
 
     private func installOutsideClickMonitors() {
@@ -246,8 +252,50 @@ final class DetailPanelWindow {
 
     private func shouldHide(for point: NSPoint) -> Bool {
         if panel.frame.contains(point) { return false }
-        if outsideClickExclusionFrame?.contains(point) == true { return false }
+        if currentExclusionFrame?.contains(point) == true { return false }
         return true
+    }
+
+    private var currentExclusionFrame: NSRect? {
+        hoverExclusionFrame?() ?? outsideClickExclusionFrame
+    }
+
+    private func isInsideHoverRegion(_ point: NSPoint) -> Bool {
+        panel.frame.contains(point) || currentExclusionFrame?.contains(point) == true
+    }
+
+    private func installHoverMoveMonitors() {
+        guard hoverGlobalMonitor == nil, hoverLocalMonitor == nil else { return }
+
+        hoverGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateHoverDismiss(at: NSEvent.mouseLocation)
+            }
+        }
+        hoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            self?.updateHoverDismiss(at: NSEvent.mouseLocation)
+            return event
+        }
+    }
+
+    private func updateHoverDismiss(at point: NSPoint) {
+        guard isShown, !isMenuBarMode else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastHoverEvaluation >= (1.0 / 90.0) else { return }
+        lastHoverEvaluation = now
+
+        if isInsideHoverRegion(point) {
+            cancelHoverDismiss()
+        } else {
+            scheduleHoverDismiss()
+        }
+    }
+
+    private func removeHoverMoveMonitors() {
+        if let hoverGlobalMonitor { NSEvent.removeMonitor(hoverGlobalMonitor) }
+        if let hoverLocalMonitor { NSEvent.removeMonitor(hoverLocalMonitor) }
+        hoverGlobalMonitor = nil
+        hoverLocalMonitor = nil
     }
 
     private func removeOutsideClickMonitors() {

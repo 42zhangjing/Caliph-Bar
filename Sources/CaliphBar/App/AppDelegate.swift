@@ -25,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailPanel = DetailPanelWindow(store: store, selection: selection)
         pillWindow = FloatingPillWindow(store: store, selection: selection)
 
+        detailPanel.hoverExclusionFrame = { [weak self] in
+            self?.pillWindow.hoverInteractionFrame
+        }
+
         pillWindow.companionHoverFrame = { [weak self] in
             guard let self, self.detailPanel.isShown, !self.detailPanel.isMenuBarMode else { return nil }
             return self.detailPanel.frame
