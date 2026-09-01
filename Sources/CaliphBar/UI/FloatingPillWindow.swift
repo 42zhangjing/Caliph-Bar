@@ -131,6 +131,7 @@ final class FloatingPillWindow: NSObject {
 
     var side: EdgeSide { position.side }
     var isVisible: Bool { panel.isVisible }
+    var hoverInteractionFrame: NSRect { hoverHitFrame() }
 
     func show() {
         panel.alphaValue = 0
@@ -360,6 +361,10 @@ final class FloatingPillWindow: NSObject {
                 withAnimation(.interpolatingSpring(stiffness: 260, damping: 24)) {
                     self.position.isHovered = false
                 }
+                // The detail panel may have skipped its first dismissal while
+                // this window still exposed the expanded hover frame. Re-arm
+                // dismissal after the hit region actually becomes compact.
+                self.onPillMouseExited?()
             }
         }
         hoverCollapseWorkItem = workItem

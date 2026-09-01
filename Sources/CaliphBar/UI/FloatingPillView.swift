@@ -75,7 +75,6 @@ struct FloatingPillView: View {
         ZStack(alignment: edgeAlignment) {
             EdgePillShape(side: position.side)
                 .fill(Color.black)
-                .allowsHitTesting(false)
 
             if isExpanded {
                 expandedContent
@@ -85,16 +84,6 @@ struct FloatingPillView: View {
                         .move(edge: position.side == .right ? .trailing : .leading)
                             .combined(with: .opacity)
                     )
-            } else {
-                Capsule()
-                    .fill(Color.white.opacity(0.22))
-                    .frame(width: 2, height: 24)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: position.side == .right ? .leading : .trailing
-                    )
-                    .padding(position.side == .right ? .leading : .trailing, 4)
             }
         }
     }
