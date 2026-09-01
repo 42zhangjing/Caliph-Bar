@@ -11,6 +11,24 @@ final class DetailPanelWindow {
         case sideRadar(EdgeSide)
     }
 
+    private enum VisibilityState {
+        case hidden
+        case presenting
+        case visible
+        case dismissing
+    }
+
+    private enum Motion {
+        static let animationKey = "caliphbar.detail-presentation"
+        static let presentedTransform = CATransform3DIdentity
+        static let hiddenScale: CGFloat = 0.985
+        static let showDuration: CFTimeInterval = 0.16
+        static let hideDuration: CFTimeInterval = 0.12
+        static let reducedMotionDuration: CFTimeInterval = 0.08
+        static let showTiming = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.30, 1.0)
+        static let hideTiming = CAMediaTimingFunction(controlPoints: 0.40, 0.0, 1.0, 1.0)
+    }
+
     private let panel: NSPanel
     private let store: UsageStore
     private let selection: SelectionModel
@@ -23,6 +41,8 @@ final class DetailPanelWindow {
     private let shadowPadding: CGFloat = 16
     private var currentMode: PanelMode?
     private var lastHoverEvaluation: CFTimeInterval = 0
+    private var visibilityState: VisibilityState = .hidden
+    private var visibilityGeneration = 0
 
     var hoverExclusionFrame: (() -> NSRect?)?
 
@@ -41,6 +61,8 @@ final class DetailPanelWindow {
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
+        panel.ignoresMouseEvents = true
     }
 
     deinit {
@@ -50,7 +72,9 @@ final class DetailPanelWindow {
         if let hoverLocalMonitor { NSEvent.removeMonitor(hoverLocalMonitor) }
     }
 
-    var isShown: Bool { panel.isVisible && panel.alphaValue > 0.01 }
+    var isShown: Bool {
+        visibilityState == .presenting || visibilityState == .visible
+    }
     var frame: NSRect { panel.frame }
     var isMenuBarMode: Bool { currentMode == .menuBar }
 
@@ -90,8 +114,10 @@ final class DetailPanelWindow {
         dismissWorkItem = nil
 
         outsideClickExclusionFrame = exclusionFrame
+        let previousVisibility = visibilityState
+        let modeChanged = currentMode != newMode
 
-        if panel.contentViewController == nil || currentMode != newMode {
+        if panel.contentViewController == nil || modeChanged {
             let rootView: AnyView
             switch newMode {
             case .menuBar:
@@ -118,24 +144,35 @@ final class DetailPanelWindow {
         let size = preferredSize(for: newMode, hosting: hosting)
         let targetOrigin = calculateOrigin(for: anchor, size: size, on: screen, side: side)
         let targetFrame = NSRect(origin: targetOrigin, size: size)
+        let wasPresented = previousVisibility == .presenting || previousVisibility == .visible
+        let wasDismissing = previousVisibility == .dismissing
 
-        if isShown {
+        if wasPresented || wasDismissing {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.17
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.22, 1.0)
                 panel.animator().setFrame(targetFrame, display: true)
-                panel.animator().alphaValue = 1.0
             }
         } else {
             panel.setFrame(targetFrame, display: true)
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
+        }
 
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.18, 0.86, 0.22, 1.0)
-                panel.animator().alphaValue = 1.0
-            }
+        panel.contentView?.layoutSubtreeIfNeeded()
+        configurePresentationAnchor(for: newMode)
+
+        if previousVisibility == .hidden {
+            setContentPresentation(visible: false, mode: newMode)
+        }
+
+        panel.alphaValue = 1
+        panel.ignoresMouseEvents = false
+        if !wasPresented { panel.orderFrontRegardless() }
+
+        if wasPresented {
+            if modeChanged { setContentPresentation(visible: true, mode: newMode) }
+            visibilityState = .visible
+        } else {
+            animateContentPresentation(visible: true, mode: newMode)
         }
 
         installOutsideClickMonitors()
@@ -196,7 +233,7 @@ final class DetailPanelWindow {
         return targetOrigin
     }
 
-    func scheduleHoverDismiss(delay: TimeInterval = 0.32) {
+    func scheduleHoverDismiss(delay: TimeInterval = 0) {
         guard isShown, !isMenuBarMode else { return }
         guard dismissWorkItem == nil else { return }
 
@@ -223,16 +260,136 @@ final class DetailPanelWindow {
     func hide() {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
-        guard panel.isVisible else { return }
+        guard visibilityState == .presenting || visibilityState == .visible else { return }
         removeOutsideClickMonitors()
-        removeHoverMoveMonitors()
 
-        // Side panels must leave the WindowServer synchronously. Deferring
-        // orderOut until an alpha animation completes can strand the SwiftUI
-        // shadow layer until the next system input event.
-        panel.contentView?.layer?.removeAllAnimations()
-        panel.alphaValue = 0
-        panel.orderOut(nil)
+        guard let currentMode else { return }
+        animateContentPresentation(visible: false, mode: currentMode)
+    }
+
+    private func revealCurrentPanel() {
+        guard visibilityState == .dismissing, let currentMode else { return }
+        panel.ignoresMouseEvents = false
+        animateContentPresentation(visible: true, mode: currentMode)
+        installOutsideClickMonitors()
+        if !isMenuBarMode { installHoverMoveMonitors() }
+    }
+
+    private func configurePresentationAnchor(for mode: PanelMode) {
+        guard let layer = panel.contentView?.layer else { return }
+
+        let targetAnchor: CGPoint
+        switch mode {
+        case .side(.left), .sideRadar(.left):
+            targetAnchor = CGPoint(x: 0, y: 0.5)
+        case .side(.right), .sideRadar(.right):
+            targetAnchor = CGPoint(x: 1, y: 0.5)
+        case .menuBar:
+            targetAnchor = CGPoint(x: 0.5, y: 1)
+        }
+
+        guard layer.anchorPoint != targetAnchor else { return }
+        let oldAnchor = layer.anchorPoint
+        let oldPosition = layer.position
+        layer.anchorPoint = targetAnchor
+        layer.position = CGPoint(
+            x: oldPosition.x + (targetAnchor.x - oldAnchor.x) * layer.bounds.width,
+            y: oldPosition.y + (targetAnchor.y - oldAnchor.y) * layer.bounds.height
+        )
+    }
+
+    private func setContentPresentation(visible: Bool, mode: PanelMode) {
+        guard let layer = panel.contentView?.layer else { return }
+        layer.removeAnimation(forKey: Motion.animationKey)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.opacity = visible ? 1 : 0
+        layer.transform = presentationTransform(visible: visible, mode: mode)
+        CATransaction.commit()
+    }
+
+    private func animateContentPresentation(visible: Bool, mode: PanelMode) {
+        guard let layer = panel.contentView?.layer else {
+            visibilityState = visible ? .visible : .hidden
+            panel.ignoresMouseEvents = !visible
+            return
+        }
+
+        let presentationLayer = layer.presentation()
+        let startOpacity = presentationLayer?.opacity ?? layer.opacity
+        let startTransform = presentationLayer?.transform ?? layer.transform
+        let targetOpacity: Float = visible ? 1 : 0
+        let targetTransform = presentationTransform(visible: visible, mode: mode)
+
+        layer.removeAnimation(forKey: Motion.animationKey)
+        visibilityGeneration += 1
+        let generation = visibilityGeneration
+        visibilityState = visible ? .presenting : .dismissing
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.opacity = targetOpacity
+        layer.transform = targetTransform
+        CATransaction.commit()
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let baseDuration = reduceMotion
+            ? Motion.reducedMotionDuration
+            : (visible ? Motion.showDuration : Motion.hideDuration)
+        let remaining = min(1, max(0.35, Double(abs(targetOpacity - startOpacity))))
+        let duration = baseDuration * remaining
+
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = startOpacity
+        opacity.toValue = targetOpacity
+
+        let transform = CABasicAnimation(keyPath: "transform")
+        transform.fromValue = NSValue(caTransform3D: startTransform)
+        transform.toValue = NSValue(caTransform3D: targetTransform)
+
+        let group = CAAnimationGroup()
+        group.animations = reduceMotion ? [opacity] : [opacity, transform]
+        group.duration = duration
+        group.timingFunction = visible ? Motion.showTiming : Motion.hideTiming
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            Task { @MainActor in
+                guard let self, self.visibilityGeneration == generation else { return }
+                layer.removeAnimation(forKey: Motion.animationKey)
+                if visible {
+                    self.visibilityState = .visible
+                    self.panel.ignoresMouseEvents = false
+                } else {
+                    // Keep the clear WindowServer surface alive instead of ordering
+                    // the panel out over another app's translucent window. This avoids
+                    // stale compositor tiles while remaining fully click-through.
+                    self.visibilityState = .hidden
+                    self.panel.ignoresMouseEvents = true
+                    self.removeHoverMoveMonitors()
+                }
+            }
+        }
+        layer.add(group, forKey: Motion.animationKey)
+        CATransaction.commit()
+    }
+
+    private func presentationTransform(visible: Bool, mode: PanelMode) -> CATransform3D {
+        guard !visible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            return Motion.presentedTransform
+        }
+
+        var transform = CATransform3DMakeScale(Motion.hiddenScale, Motion.hiddenScale, 1)
+        switch mode {
+        case .side(.left), .sideRadar(.left):
+            transform = CATransform3DTranslate(transform, -2.5, 0, 0)
+        case .side(.right), .sideRadar(.right):
+            transform = CATransform3DTranslate(transform, 2.5, 0, 0)
+        case .menuBar:
+            break
+        }
+        return transform
     }
 
     private func installOutsideClickMonitors() {
@@ -279,13 +436,14 @@ final class DetailPanelWindow {
     }
 
     private func updateHoverDismiss(at point: NSPoint) {
-        guard isShown, !isMenuBarMode else { return }
+        guard visibilityState != .hidden, !isMenuBarMode else { return }
         let now = CACurrentMediaTime()
         guard now - lastHoverEvaluation >= (1.0 / 90.0) else { return }
         lastHoverEvaluation = now
 
         if isInsideHoverRegion(point) {
             cancelHoverDismiss()
+            revealCurrentPanel()
         } else {
             scheduleHoverDismiss()
         }
