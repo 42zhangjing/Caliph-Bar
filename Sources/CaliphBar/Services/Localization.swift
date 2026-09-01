@@ -196,6 +196,18 @@ public final class L10n: ObservableObject {
         isChinese ? "回到屏幕中部" : "Center on Screen"
     }
 
+    public var ringCoreLabel: String {
+        isChinese ? "圆环内芯" : "Ring Core"
+    }
+
+    public var ringCoreDark: String {
+        isChinese ? "深色" : "Dark"
+    }
+
+    public var ringCorePorcelain: String {
+        isChinese ? "暖瓷白" : "Warm Porcelain"
+    }
+
     public var pinRadarModule: String {
         isChinese ? "侧栏独立显示 Radar" : "Pin Radar to Edge Rail"
     }

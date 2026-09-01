@@ -36,6 +36,19 @@ struct SettingsView: View {
                             }
                         }
                         divider
+                        segmentedRow(l10n.ringCoreLabel) {
+                            segment(l10n.ringCoreDark, selected: store.ringCoreStyle == .dark) {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    store.ringCoreStyle = .dark
+                                }
+                            }
+                            segment(l10n.ringCorePorcelain, selected: store.ringCoreStyle == .porcelain) {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    store.ringCoreStyle = .porcelain
+                                }
+                            }
+                        }
+                        divider
                         Button {
                             store.centerPill()
                         } label: {
