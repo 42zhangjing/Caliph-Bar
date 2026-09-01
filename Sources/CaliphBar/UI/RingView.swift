@@ -5,6 +5,7 @@ struct RingView: View {
     let provider: ProviderID
     let remainingFraction: Double?
     var size: CGFloat = 42
+    var coreStyle: RingCoreStyle = .dark
 
     @State private var displayedFraction: Double = 0.0
 
@@ -22,6 +23,13 @@ struct RingView: View {
     }
 
     private var markSaturation: Double {
+        if coreStyle == .porcelain {
+            switch provider {
+            case .claude: return 0.94
+            case .codex: return 0.88
+            case .gemini: return 0.90
+            }
+        }
         switch provider {
         case .claude: return 0.86
         case .codex: return 0.84
@@ -30,6 +38,13 @@ struct RingView: View {
     }
 
     private var markBrightness: Double {
+        if coreStyle == .porcelain {
+            switch provider {
+            case .claude: return -0.10
+            case .codex: return -0.14
+            case .gemini: return -0.08
+            }
+        }
         switch provider {
         case .claude: return 0.04
         case .codex: return -0.03
@@ -40,8 +55,14 @@ struct RingView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 0.035, green: 0.039, blue: 0.047).opacity(0.96))
-                .padding(2.25)
+                .fill(coreStyle.fillStyle)
+                .padding(coreStyle.inset)
+
+            if coreStyle == .porcelain {
+                Circle()
+                    .stroke(coreStyle.separatorColor, lineWidth: 0.65)
+                    .padding(coreStyle.inset)
+            }
 
             Circle()
                 .stroke(Color.white.opacity(0.14), lineWidth: 2.25)
@@ -81,4 +102,5 @@ struct RingView: View {
             }
         }
     }
+
 }

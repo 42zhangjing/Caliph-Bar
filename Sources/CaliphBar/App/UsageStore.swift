@@ -37,6 +37,10 @@ final class UsageStore: ObservableObject {
         didSet { UserDefaults.standard.set(radarPinned, forKey: Keys.radarPinned) }
     }
 
+    @Published var ringCoreStyle: RingCoreStyle {
+        didSet { UserDefaults.standard.set(ringCoreStyle.rawValue, forKey: Keys.ringCoreStyle) }
+    }
+
     @Published var claudeSessionBudget: Double {
         didSet { UserDefaults.standard.set(claudeSessionBudget, forKey: Keys.sessionBudget) }
     }
@@ -58,6 +62,7 @@ final class UsageStore: ObservableObject {
         static let pillBehavior = "caliphbar.pillBehavior"
         static let pillSide = "caliphbar.pillSide"
         static let radarPinned = "caliphbar.radarPinned"
+        static let ringCoreStyle = "caliphbar.ringCoreStyle"
         static let sessionBudget = "caliphbar.claudeSessionBudget"
         static let weeklyBudget = "caliphbar.claudeWeeklyBudget"
     }
@@ -75,6 +80,8 @@ final class UsageStore: ObservableObject {
         pillBehavior = PillBehavior(rawValue: behaviorRaw) ?? .alwaysExpanded
         pillSide = defaults.string(forKey: Keys.pillSide).flatMap(EdgeSide.init(rawValue:)) ?? .right
         radarPinned = defaults.object(forKey: Keys.radarPinned) as? Bool ?? false
+        ringCoreStyle = defaults.string(forKey: Keys.ringCoreStyle)
+            .flatMap(RingCoreStyle.init(rawValue:)) ?? .dark
         claudeSessionBudget = defaults.object(forKey: Keys.sessionBudget) as? Double ?? 40
         claudeWeeklyBudget = defaults.object(forKey: Keys.weeklyBudget) as? Double ?? 400
         launchAtLogin = LaunchAtLogin.isEnabled

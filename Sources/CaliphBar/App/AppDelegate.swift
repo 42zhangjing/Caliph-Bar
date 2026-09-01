@@ -117,8 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title: String
         let color: NSColor
         if let remaining = item?.headlineRemainingFraction {
-            let percent = Int((remaining * 100).rounded())
-            title = " \(percent)%"
+            title = " \(StatusColor.percentageText(for: remaining))"
             color = StatusColor.nsValueColor(for: remaining)
         } else {
             title = " —"

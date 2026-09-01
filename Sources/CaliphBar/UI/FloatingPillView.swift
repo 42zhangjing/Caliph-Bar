@@ -105,13 +105,14 @@ struct FloatingPillView: View {
                 ProviderPillButton(
                     provider: provider,
                     snapshot: store.item(for: provider),
+                    coreStyle: store.ringCoreStyle,
                     action: {
                         position.onProviderTapped?(provider)
                     }
                 )
             }
             if store.radarPinned {
-                RadarPillButton {
+                RadarPillButton(coreStyle: store.ringCoreStyle) {
                     position.onRadarTapped?()
                 }
             }
@@ -130,6 +131,7 @@ struct FloatingPillView: View {
 }
 
 private struct RadarPillButton: View {
+    let coreStyle: RingCoreStyle
     let action: () -> Void
     @ObservedObject private var radar = CodexRadarStore.shared
     @ObservedObject private var l10n = L10n.shared
@@ -139,13 +141,18 @@ private struct RadarPillButton: View {
             VStack(spacing: 4) {
                 ZStack {
                     Circle()
-                        .fill(Color(red: 0.035, green: 0.039, blue: 0.047).opacity(0.96))
-                        .padding(2.25)
+                        .fill(coreStyle.fillStyle)
+                        .padding(coreStyle.inset)
+                    if coreStyle == .porcelain {
+                        Circle()
+                            .stroke(coreStyle.separatorColor, lineWidth: 0.65)
+                            .padding(coreStyle.inset)
+                    }
                     Circle()
                         .stroke(Color.white.opacity(0.14), lineWidth: 2.25)
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(CodexRadarPresentation.brandColor)
+                        .foregroundStyle(coreStyle.radarBrandColor)
                 }
                 .frame(width: SideNotchLayout.ringSize, height: SideNotchLayout.ringSize)
 
@@ -182,6 +189,7 @@ private struct RadarPillButton: View {
 private struct ProviderPillButton: View {
     let provider: ProviderID
     let snapshot: ProviderSnapshot?
+    let coreStyle: RingCoreStyle
     let action: () -> Void
 
     @ObservedObject private var radar = CodexRadarStore.shared
@@ -191,7 +199,12 @@ private struct ProviderPillButton: View {
         let remaining = snapshot?.headlineRemainingFraction
         Button(action: action) {
             VStack(spacing: 4) {
-                RingView(provider: provider, remainingFraction: remaining, size: SideNotchLayout.ringSize)
+                RingView(
+                    provider: provider,
+                    remainingFraction: remaining,
+                    size: SideNotchLayout.ringSize,
+                    coreStyle: coreStyle
+                )
 
                 Text(percentageLabel(for: remaining))
                     .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
@@ -210,7 +223,7 @@ private struct ProviderPillButton: View {
 
     private func percentageLabel(for remaining: Double?) -> String {
         guard let remaining else { return "—" }
-        return "\(Int((remaining * 100).rounded()))%"
+        return StatusColor.percentageText(for: remaining)
     }
 
     private var radarHelp: String {

@@ -46,6 +46,10 @@ enum StatusColor {
         }
     }
 
+    static func percentageText(for remainingFraction: Double) -> String {
+        "\(Int((remainingFraction * 100).rounded()))%"
+    }
+
     private static func swatch(for remainingFraction: Double) -> Swatch {
         if remainingFraction < 0.20 {
             return alert
