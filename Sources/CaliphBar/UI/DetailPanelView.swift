@@ -22,6 +22,12 @@ enum SideDetailPanelLayout {
 private struct IntegratedPointerPanelShape: Shape {
     let side: EdgeSide
     let pointerLength: CGFloat
+    var pointerOffsetY: CGFloat = 0
+
+    var animatableData: CGFloat {
+        get { pointerOffsetY }
+        set { pointerOffsetY = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
         let rightPath = pathPointingRight(in: rect)
@@ -35,7 +41,7 @@ private struct IntegratedPointerPanelShape: Shape {
     private func pathPointingRight(in rect: CGRect) -> Path {
         let radius = min(16, rect.height / 2)
         let bodyMaxX = rect.maxX - pointerLength
-        let midY = rect.midY
+        let midY = min(max(rect.midY + pointerOffsetY, rect.minY + radius + 14), rect.maxY - radius - 14)
         let transitionHalfHeight = min(28, rect.height * 0.24)
         let pointerBaseHalfHeight = min(10, rect.height * 0.12)
         let shoulderReach = min(6, pointerLength * 0.22)
@@ -137,12 +143,20 @@ struct SideDetailPanelView: View {
             height: SideDetailPanelLayout.cardHeight
         )
         .background(
-            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
-                .fill(backgroundColor)
+            IntegratedPointerPanelShape(
+                side: side,
+                pointerLength: SideDetailPanelLayout.pointerLength,
+                pointerOffsetY: selection.sidePointerOffset
+            )
+            .fill(backgroundColor)
         )
         .overlay(
-            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
-                .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
+            IntegratedPointerPanelShape(
+                side: side,
+                pointerLength: SideDetailPanelLayout.pointerLength,
+                pointerOffsetY: selection.sidePointerOffset
+            )
+            .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
         )
         .compositingGroup()
         .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
@@ -185,6 +199,10 @@ struct SideDetailPanelView: View {
                 }
             }
 
+            if item.provider == .codex && item.windows.count <= 2 {
+                CodexMiniRadarInlineBlock()
+            }
+
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -224,6 +242,51 @@ struct SideDetailPanelView: View {
     }
 }
 
+private struct CodexMiniRadarInlineBlock: View {
+    @ObservedObject private var radar = CodexRadarStore.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+                .padding(.vertical, 2)
+
+            HStack(spacing: 6) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CodexRadarPresentation.brandColor)
+                Text("RESET RADAR")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.82))
+                Spacer()
+                if let prob = radar.snapshot?.probability24h {
+                    Text("24H \(Int((prob * 100).rounded()))%")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+                Text(CodexRadarPresentation.statusLabel(for: radar.signal, isChinese: l10n.isChinese, compact: true))
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(CodexRadarPresentation.statusColor(for: radar.signal))
+            }
+
+            if let summary = radar.snapshot?.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.white.opacity(0.50))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let message = radar.snapshot?.message, !message.isEmpty {
+                Text(message)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.white.opacity(0.50))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
 private struct CompactUsageBar: View {
     let window: UsageWindow
     @ObservedObject private var l10n = L10n.shared
@@ -258,16 +321,19 @@ private struct CompactUsageBar: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.11))
-                    Capsule()
-                        .fill(StatusColor.color(for: window.remainingFraction))
-                        .frame(
-                            width: max(
-                                4,
-                                geometry.size.width * CGFloat(min(1, max(0, window.remainingFraction)))
+                    Capsule().fill(Color.white.opacity(0.16))
+                        .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 0.5))
+                    if window.remainingFraction > 0.001 {
+                        Capsule()
+                            .fill(StatusColor.color(for: window.remainingFraction))
+                            .frame(
+                                width: max(
+                                    4,
+                                    geometry.size.width * CGFloat(min(1, max(0, window.remainingFraction)))
+                                )
                             )
-                        )
-                        .animation(.easeOut(duration: 0.22), value: window.remainingFraction)
+                            .animation(.easeOut(duration: 0.22), value: window.remainingFraction)
+                    }
                 }
             }
             .frame(height: 4)
@@ -282,6 +348,7 @@ private struct CompactUsageBar: View {
 
 struct SideRadarPanelView: View {
     let side: EdgeSide
+    @ObservedObject var selection: SelectionModel
     @ObservedObject private var radar = CodexRadarStore.shared
     @ObservedObject private var l10n = L10n.shared
 
@@ -289,7 +356,7 @@ struct SideRadarPanelView: View {
         HStack(spacing: 0) {
             if side == .left { Color.clear.frame(width: SideDetailPanelLayout.pointerLength) }
 
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .font(.system(size: 16, weight: .semibold))
@@ -313,11 +380,20 @@ struct SideRadarPanelView: View {
                     probabilityCell("48H", value: radar.snapshot?.probability48h)
                 }
 
-                Text(detailText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.56))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(detailText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.68))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let message = radar.snapshot?.message, !message.isEmpty {
+                        Text(message)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .lineLimit(1)
+                    }
+                }
 
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
@@ -337,12 +413,20 @@ struct SideRadarPanelView: View {
         }
         .frame(width: SideDetailPanelLayout.cardWidth + SideDetailPanelLayout.pointerLength, height: SideDetailPanelLayout.cardHeight)
         .background(
-            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
-                .fill(Color(red: 0.025, green: 0.026, blue: 0.030))
+            IntegratedPointerPanelShape(
+                side: side,
+                pointerLength: SideDetailPanelLayout.pointerLength,
+                pointerOffsetY: selection.sidePointerOffset
+            )
+            .fill(Color(red: 0.025, green: 0.026, blue: 0.030))
         )
         .overlay(
-            IntegratedPointerPanelShape(side: side, pointerLength: SideDetailPanelLayout.pointerLength)
-                .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
+            IntegratedPointerPanelShape(
+                side: side,
+                pointerLength: SideDetailPanelLayout.pointerLength,
+                pointerOffsetY: selection.sidePointerOffset
+            )
+            .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
         )
         .padding(SideDetailPanelLayout.shadowPadding)
     }
@@ -375,7 +459,10 @@ struct SideRadarPanelView: View {
     }
 
     private var detailText: String {
-        CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+        if let summary = radar.snapshot?.summary, !summary.isEmpty {
+            return summary
+        }
+        return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
     }
 
     private var sourceURL: URL {

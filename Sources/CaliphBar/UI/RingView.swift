@@ -67,7 +67,7 @@ struct RingView: View {
             Circle()
                 .stroke(Color.white.opacity(0.14), lineWidth: 2.25)
 
-            if remainingFraction != nil {
+            if let remaining = remainingFraction, remaining > 0.001, displayedFraction > 0.001 {
                 Circle()
                     .trim(from: 0, to: min(1, max(0, displayedFraction)))
                     .stroke(

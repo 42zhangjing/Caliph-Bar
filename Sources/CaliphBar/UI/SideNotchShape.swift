@@ -29,9 +29,9 @@ enum SideNotchLayout {
     static let silhouettePercentageFontSize: CGFloat = 8
 
     /// Normalized anchors on the silhouette bounding box (top-left is (0,0), bottom-right is (1,1))
-    static let claudeAnchor = CGPoint(x: 0.611, y: 0.103)      // Head
-    static let codexAnchor = CGPoint(x: 0.362, y: 0.258)       // Chest
-    static let antigravityAnchor = CGPoint(x: 0.536, y: 0.419) // Hip
+    static let claudeAnchor = CGPoint(x: 0.600, y: 0.118)      // Head
+    static let codexAnchor = CGPoint(x: 0.380, y: 0.278)       // Chest
+    static let antigravityAnchor = CGPoint(x: 0.550, y: 0.442) // Hip
     static let radarAnchor = CGPoint(x: 0.851, y: 0.668)       // Base
 
     static func silhouetteAnchor(for provider: ProviderID) -> CGPoint {

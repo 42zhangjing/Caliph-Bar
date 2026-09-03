@@ -28,6 +28,7 @@ struct CodexRadarSnapshot: Codable, Equatable, Sendable {
     let probability24h: Double?
     let probability48h: Double?
     let summary: String?
+    let closedAt: Date?
     let sourceURL: URL?
     let sourceUpdatedAt: Date?
     let fetchedAt: Date
@@ -315,6 +316,7 @@ private enum CodexRadarParser {
         let probability24h = probability(prediction?["probability_24h"] ?? prediction?["probability24h"] ?? root["probability_24h"])
         let probability48h = probability(prediction?["probability_48h"] ?? prediction?["probability48h"] ?? root["probability_48h"])
         let summary = string(prediction?["summary"] ?? root["summary"])
+        let closedAt = date(window?["closed_at"] ?? root["closed_at"])
         let sourceURL = string(window?["source_url"] ?? window?["sourceURL"] ?? root["source_url"])
             .flatMap(URL.init(string:))
 
@@ -323,7 +325,7 @@ private enum CodexRadarParser {
             date(root["monitored_at"]),
             date(root["updated_at"]),
             date(window?["opened_at"]),
-            date(window?["closed_at"]),
+            closedAt,
         ].compactMap { $0 }.max()
 
         guard windowOpen != nil || status != nil || predictionLevel != nil || probability24h != nil || summary != nil else {
@@ -339,6 +341,7 @@ private enum CodexRadarParser {
             probability24h: probability24h,
             probability48h: probability48h,
             summary: summary,
+            closedAt: closedAt,
             sourceURL: sourceURL,
             sourceUpdatedAt: updated,
             fetchedAt: fetchedAt

@@ -73,7 +73,7 @@ public struct ProviderSnapshot: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var headlineRemainingFraction: Double? {
-        if provider == .gemini {
+        if provider == .gemini || provider == .codex {
             return windows.map(\.remainingFraction).min()
         }
         return windows.first?.remainingFraction

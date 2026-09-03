@@ -189,6 +189,9 @@ struct CodexRadarDetailStrip: View {
     }
 
     private var detailText: String {
-        CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+        if let summary = radar.snapshot?.summary, !summary.isEmpty {
+            return summary
+        }
+        return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
     }
 }

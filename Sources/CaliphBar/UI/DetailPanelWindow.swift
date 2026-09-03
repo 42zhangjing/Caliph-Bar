@@ -129,7 +129,7 @@ final class DetailPanelWindow {
                     SideDetailPanelView(store: store, selection: selection, side: edge)
                 )
             case let .sideRadar(edge):
-                rootView = AnyView(SideRadarPanelView(side: edge))
+                rootView = AnyView(SideRadarPanelView(side: edge, selection: selection))
             }
 
             let hosting = NSHostingController(rootView: rootView)
@@ -142,8 +142,11 @@ final class DetailPanelWindow {
 
         guard let hosting = panel.contentViewController else { return }
         let size = preferredSize(for: newMode, hosting: hosting)
-        let targetOrigin = calculateOrigin(for: anchor, size: size, on: screen, side: side)
+        let (targetOrigin, pointerOffset) = calculateOrigin(for: anchor, size: size, on: screen, side: side)
         let targetFrame = NSRect(origin: targetOrigin, size: size)
+        withAnimation(.easeOut(duration: 0.16)) {
+            selection.sidePointerOffset = pointerOffset
+        }
         let wasPresented = previousVisibility == .presenting || previousVisibility == .visible
         let wasDismissing = previousVisibility == .dismissing
 
@@ -204,7 +207,7 @@ final class DetailPanelWindow {
         size: NSSize,
         on screen: NSScreen,
         side: EdgeSide?
-    ) -> NSPoint {
+    ) -> (origin: NSPoint, pointerOffset: CGFloat) {
         let pointerGap: CGFloat = 8
         var targetOrigin: NSPoint
 
@@ -226,11 +229,13 @@ final class DetailPanelWindow {
             )
         }
 
+        let idealY = targetOrigin.y
         let frame = screen.visibleFrame
         targetOrigin.x = min(max(targetOrigin.x, frame.minX - shadowPadding + 8), frame.maxX - size.width + shadowPadding - 8)
         targetOrigin.y = min(max(targetOrigin.y, frame.minY - shadowPadding + 8), frame.maxY - size.height + shadowPadding - 8)
 
-        return targetOrigin
+        let pointerOffset = side != nil ? (targetOrigin.y - idealY) : 0
+        return (targetOrigin, pointerOffset)
     }
 
     func scheduleHoverDismiss(delay: TimeInterval = 0) {

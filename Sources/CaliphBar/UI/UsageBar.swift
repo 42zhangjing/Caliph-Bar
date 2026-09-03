@@ -33,11 +33,15 @@ struct UsageBar: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.10))
                     Capsule()
-                        .fill(StatusColor.color(for: window.remainingFraction))
-                        .frame(width: max(4, geometry.size.width * CGFloat(min(1.0, max(0.0, window.remainingFraction)))))
-                        .animation(.easeOut(duration: 0.24), value: window.remainingFraction)
+                        .fill(Color.white.opacity(0.16))
+                        .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 0.5))
+                    if window.remainingFraction > 0.001 {
+                        Capsule()
+                            .fill(StatusColor.color(for: window.remainingFraction))
+                            .frame(width: max(4, geometry.size.width * CGFloat(min(1.0, max(0.0, window.remainingFraction)))))
+                            .animation(.easeOut(duration: 0.24), value: window.remainingFraction)
+                    }
                 }
             }
             .frame(height: 5)

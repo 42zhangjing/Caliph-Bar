@@ -10,10 +10,11 @@ struct InstrumentConsoleView: View {
 
     @State private var showSettings = false
     @State private var hoveredProvider: ProviderID?
+    @State private var spinAngle: Double = 0
     @Namespace private var tabNamespace
 
     private let width: CGFloat = 458
-    private let contentHeight: CGFloat = 510
+    private let contentHeight: CGFloat = 430
     private let background = Color(red: 0.042, green: 0.044, blue: 0.050)
 
     var body: some View {
@@ -50,6 +51,17 @@ struct InstrumentConsoleView: View {
         .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
         .fixedSize()
         .animation(.easeOut(duration: 0.17), value: showSettings)
+        .onChange(of: store.isRefreshing) { refreshing in
+            if refreshing {
+                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
+                    spinAngle = 360
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    spinAngle = 0
+                }
+            }
+        }
     }
 
     private var toolbar: some View {
@@ -58,10 +70,10 @@ struct InstrumentConsoleView: View {
                 Text(showSettings ? l10n.settingsTitle : l10n.appTitle)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
-                if !showSettings {
-                    Text(store.isRefreshing ? l10n.refreshInProgress : l10n.accountTruthTitle)
+                if !showSettings && store.isRefreshing {
+                    Text(l10n.refreshInProgress)
                         .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                        .foregroundStyle(store.isRefreshing ? Color.yellow.opacity(0.86) : Color.white.opacity(0.42))
+                        .foregroundStyle(Color.yellow.opacity(0.86))
                 }
             }
 
@@ -71,7 +83,7 @@ struct InstrumentConsoleView: View {
                 Button { store.refresh() } label: {
                     ZStack {
                         Image(systemName: "arrow.clockwise")
-                            .rotationEffect(.degrees(store.isRefreshing ? 180 : 0))
+                            .rotationEffect(.degrees(spinAngle))
                     }
                 }
                 .buttonStyle(ConsoleIconButtonStyle(active: store.isRefreshing))

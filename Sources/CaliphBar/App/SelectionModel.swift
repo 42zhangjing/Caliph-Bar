@@ -8,6 +8,7 @@ final class SelectionModel: ObservableObject {
         didSet { UserDefaults.standard.set(selected.rawValue, forKey: Self.key) }
     }
     @Published private(set) var sidePreview: ProviderID? = nil
+    @Published var sidePointerOffset: CGFloat = 0
 
     private static let key = "caliphbar.selectedProvider"
 
