@@ -4,6 +4,7 @@ import CaliphBarCore
 struct UsageBar: View {
     let window: UsageWindow
     @ObservedObject private var l10n = L10n.shared
+    @State private var isHovered = false
 
     var localizedTitle: String {
         switch window.id {
@@ -23,11 +24,12 @@ struct UsageBar: View {
                     .foregroundStyle(.white)
                 Spacer()
                 if let reset = window.resetsAt {
-                    Text(l10n.resetsText(at: reset))
+                    Text(resetTimeString(for: reset))
                         .font(.system(size: 10.5, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.68))
+                        .foregroundStyle(isHovered ? .white.opacity(0.88) : .white.opacity(0.68))
                         .help(reset.formatted(date: .abbreviated, time: .shortened))
+                        .animation(.easeOut(duration: 0.15), value: isHovered)
                 }
             }
 
@@ -52,5 +54,24 @@ struct UsageBar: View {
                 .monospacedDigit()
                 .foregroundStyle(StatusColor.valueColor(for: window.remainingFraction))
         }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.white.opacity(isHovered ? 0.035 : 0))
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.14)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func resetTimeString(for reset: Date) -> String {
+        if isHovered {
+            return reset.formatted(date: .abbreviated, time: .shortened)
+        }
+        return l10n.resetsText(at: reset)
     }
 }

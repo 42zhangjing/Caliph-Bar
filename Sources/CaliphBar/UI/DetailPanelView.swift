@@ -184,6 +184,17 @@ struct SideDetailPanelView: View {
                     CodexRadarBadge()
                 }
                 sourceIndicator(item.source)
+
+                Button {
+                    NSWorkspace.shared.open(providerConsoleURL(for: item.provider))
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help(l10n.isChinese ? "在浏览器中打开官方用量后台" : "Open official usage console in browser")
             }
 
             if item.windows.isEmpty {
@@ -240,6 +251,17 @@ struct SideDetailPanelView: View {
         }
         return item.note ?? l10n.usageUnavailable
     }
+
+    private func providerConsoleURL(for provider: ProviderID) -> URL {
+        switch provider {
+        case .claude:
+            return URL(string: "https://console.anthropic.com/settings/usage")!
+        case .codex:
+            return URL(string: "https://chatgpt.com/#settings/Account")!
+        case .gemini:
+            return URL(string: "https://aistudio.google.com/")!
+        }
+    }
 }
 
 private struct CodexMiniRadarInlineBlock: View {
@@ -290,6 +312,7 @@ private struct CodexMiniRadarInlineBlock: View {
 private struct CompactUsageBar: View {
     let window: UsageWindow
     @ObservedObject private var l10n = L10n.shared
+    @State private var isHovered = false
 
     private var localizedTitle: String {
         switch window.id {
@@ -311,11 +334,12 @@ private struct CompactUsageBar: View {
                 Spacer()
 
                 if let reset = window.resetsAt {
-                    Text(l10n.resetsText(at: reset))
+                    Text(resetTimeString(for: reset))
                         .font(.system(size: 9, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.68))
+                        .foregroundStyle(isHovered ? .white.opacity(0.88) : .white.opacity(0.68))
                         .help(reset.formatted(date: .abbreviated, time: .shortened))
+                        .animation(.easeOut(duration: 0.15), value: isHovered)
                 }
             }
 
@@ -343,6 +367,25 @@ private struct CompactUsageBar: View {
                 .monospacedDigit()
                 .foregroundStyle(StatusColor.valueColor(for: window.remainingFraction))
         }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color.white.opacity(isHovered ? 0.035 : 0))
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.14)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func resetTimeString(for reset: Date) -> String {
+        if isHovered {
+            return reset.formatted(date: .abbreviated, time: .shortened)
+        }
+        return l10n.resetsText(at: reset)
     }
 }
 

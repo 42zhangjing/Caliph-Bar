@@ -5,3 +5,4 @@ DerivedData/
 CaliphBar.app/
 *.dSYM/
 dist/
+.metadata_never_index

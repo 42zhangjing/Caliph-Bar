@@ -331,6 +331,7 @@ private struct RadarPillButton: View {
     let action: () -> Void
     @ObservedObject private var radar = CodexRadarStore.shared
     @ObservedObject private var l10n = L10n.shared
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -359,11 +360,18 @@ private struct RadarPillButton: View {
                     .frame(height: 12)
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(isHovered ? 0.08 : 0))
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.75), value: isHovered)
         }
         .buttonStyle(PillItemButtonStyle())
         .accessibilityLabel("Reset Radar")
         .accessibilityValue(accessibilityValue)
         .help(l10n.isChinese ? "Codex Reset Radar 公共情报" : "Codex Reset Radar public intelligence")
+        .onHover { isHovered = $0 }
     }
 
     private var probabilityLabel: String {
@@ -389,6 +397,7 @@ private struct ProviderPillButton: View {
 
     @ObservedObject private var radar = CodexRadarStore.shared
     @ObservedObject private var l10n = L10n.shared
+    @State private var isHovered = false
 
     var body: some View {
         let remaining = snapshot?.headlineRemainingFraction
@@ -411,9 +420,16 @@ private struct ProviderPillButton: View {
                     .animation(.easeOut(duration: 0.18), value: remaining)
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(isHovered ? 0.08 : 0))
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.75), value: isHovered)
         }
         .buttonStyle(PillItemButtonStyle())
         .help(provider == .codex ? "\(provider.displayName) · \(radarHelp)" : provider.displayName)
+        .onHover { isHovered = $0 }
     }
 
     private func percentageLabel(for remaining: Double?) -> String {

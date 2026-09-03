@@ -166,15 +166,36 @@ struct InstrumentConsoleView: View {
     private var providerTabs: some View {
         HStack(spacing: 4) {
             ForEach(ProviderID.allCases, id: \.self) { provider in
+                let remaining = store.item(for: provider)?.headlineRemainingFraction
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) { selection.selectFromMenu(provider) }
                 } label: {
-                    HStack(spacing: 7) {
-                        BrandMark(provider: provider, size: 16)
+                    HStack(spacing: 5) {
+                        BrandMark(provider: provider, size: 15)
                         Text(provider.displayName)
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .lineLimit(1)
+
+                        Spacer(minLength: 0)
+
+                        if let remaining {
+                            Text(StatusColor.percentageText(for: remaining))
+                                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .monospacedDigit()
+                                .foregroundStyle(StatusColor.valueColor(for: remaining))
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 1.5)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white.opacity(selection.selected == provider ? 0.14 : 0.05))
+                                )
+                        } else {
+                            Text("—")
+                                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.24))
+                        }
                     }
+                    .padding(.horizontal, 6)
                     .foregroundStyle(selection.selected == provider ? .white : .white.opacity(0.44))
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .contentShape(Rectangle())
@@ -222,7 +243,20 @@ struct InstrumentConsoleView: View {
                     .help(item.sourceDetail)
             }
             Spacer()
-            sourceBadge(item.source)
+            HStack(spacing: 6) {
+                sourceBadge(item.source)
+                Button {
+                    NSWorkspace.shared.open(providerConsoleURL(for: item.provider))
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.white.opacity(0.04)))
+                }
+                .buttonStyle(.plain)
+                .help(l10n.isChinese ? "在浏览器中打开官方用量后台" : "Open official usage console in browser")
+            }
         }
     }
 
@@ -311,6 +345,17 @@ struct InstrumentConsoleView: View {
 
     private var radarSourceState: String {
         CodexRadarPresentation.statusLabel(for: radar.signal, isChinese: l10n.isChinese)
+    }
+
+    private func providerConsoleURL(for provider: ProviderID) -> URL {
+        switch provider {
+        case .claude:
+            return URL(string: "https://console.anthropic.com/settings/usage")!
+        case .codex:
+            return URL(string: "https://chatgpt.com/#settings/Account")!
+        case .gemini:
+            return URL(string: "https://aistudio.google.com/")!
+        }
     }
 }
 

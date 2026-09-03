@@ -118,9 +118,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
         let item = store.item(for: selection.selected)
+        let remaining = item?.headlineRemainingFraction
+
+        button.image = miniGaugeImage(for: selection.selected, remainingFraction: remaining)
+        button.imagePosition = .imageLeading
+
         let title: String
         let color: NSColor
-        if let remaining = item?.headlineRemainingFraction {
+        if let remaining {
             title = " \(StatusColor.percentageText(for: remaining))"
             color = StatusColor.nsValueColor(for: remaining)
         } else {
@@ -138,8 +143,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         let l10n = L10n.shared
-        let remainingHint = item?.headlineRemainingFraction.map { " (\(l10n.remainingPercentText(Int(($0 * 100).rounded()))))" } ?? ""
+        let remainingHint = remaining.map { " (\(l10n.remainingPercentText(Int(($0 * 100).rounded()))))" } ?? ""
         button.toolTip = "\(l10n.appTitle) · \(selection.selected.displayName)\(remainingHint)"
+    }
+
+    private func miniGaugeImage(for provider: ProviderID, remainingFraction: Double?) -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let radius: CGFloat = 6.4
+            let lineWidth: CGFloat = 1.6
+
+            // Background track
+            context.setLineWidth(lineWidth)
+            context.setStrokeColor(NSColor.labelColor.withAlphaComponent(0.20).cgColor)
+            context.strokeEllipse(in: CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            ))
+
+            // Active progress track
+            if let fraction = remainingFraction, fraction > 0.001 {
+                let startAngle = CGFloat.pi / 2 // 12 o'clock in CoreGraphics
+                let sweep = CGFloat(min(1.0, max(0.0, fraction))) * 2 * CGFloat.pi
+                let endAngle = startAngle - sweep
+
+                let progressPath = CGMutablePath()
+                progressPath.addArc(
+                    center: center,
+                    radius: radius,
+                    startAngle: startAngle,
+                    endAngle: endAngle,
+                    clockwise: true
+                )
+
+                let progressColor: NSColor
+                if fraction < 0.10 {
+                    progressColor = NSColor(calibratedRed: 1.0, green: 0.271, blue: 0.227, alpha: 1.0)
+                } else if fraction < 0.20 {
+                    progressColor = NSColor(calibratedRed: 1.0, green: 0.624, blue: 0.039, alpha: 1.0)
+                } else {
+                    progressColor = NSColor.labelColor.withAlphaComponent(0.92)
+                }
+
+                context.setStrokeColor(progressColor.cgColor)
+                context.setLineCap(.round)
+                context.addPath(progressPath)
+                context.strokePath()
+            }
+
+            // Inner Provider Mark
+            context.setFillColor(NSColor.labelColor.withAlphaComponent(0.85).cgColor)
+            switch provider {
+            case .claude:
+                context.fillEllipse(in: CGRect(x: center.x - 1.8, y: center.y - 1.8, width: 3.6, height: 3.6))
+            case .codex:
+                context.fill(CGRect(x: center.x - 1.7, y: center.y - 1.7, width: 3.4, height: 3.4))
+            case .gemini:
+                let diamond = CGMutablePath()
+                diamond.move(to: CGPoint(x: center.x, y: center.y + 2.4))
+                diamond.addLine(to: CGPoint(x: center.x + 2.2, y: center.y))
+                diamond.addLine(to: CGPoint(x: center.x, y: center.y - 2.4))
+                diamond.addLine(to: CGPoint(x: center.x - 2.2, y: center.y))
+                diamond.closeSubpath()
+                context.addPath(diamond)
+                context.fillPath()
+            }
+
+            return true
+        }
+
+        if let fraction = remainingFraction, fraction < 0.20 {
+            image.isTemplate = false
+        } else {
+            image.isTemplate = true
+        }
+        return image
     }
 
     @objc private func statusItemClicked() {
