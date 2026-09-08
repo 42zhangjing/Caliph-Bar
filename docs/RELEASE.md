@@ -2,10 +2,9 @@
 
 ## 当前发行状态
 
-- 仓库为 Private。
-- Release 只对已授权的仓库成员可见。
+- 仓库为公开开源项目。
 - App 同时包含 `arm64` 和 `x86_64`。
-- 当前使用 ad-hoc 签名，没有 Apple Developer ID 公证，因此 Release 必须标为预发布/测试版。
+- 当前使用 ad-hoc 签名，没有 Apple Developer ID 公证，因此 Release 标为预发布/测试版。
 
 ## 本地构建与验证
 
@@ -60,7 +59,7 @@ dist/CaliphBar-v<版本>-macOS-universal.zip.sha256
 3. 运行 `swift test`。
 4. 构建和打包 Universal App。
 5. 上传 ZIP 和 SHA-256 文件。
-6. 创建私有预发布。
+6. 创建预发布版本（Prerelease）。
 
 发布前先确认 `main` 已包含工作流和对应发布说明，然后执行
 
@@ -75,7 +74,7 @@ git push origin v0.2.0
 
 使用者从 Release 下载 ZIP，解压后将 `CaliphBar.app` 拖入“应用程序”。首次启动应先右键并选择“打开”。
 
-当前包没有 Apple 公证，macOS 仍拦截时，在确认 ZIP 来自私有仓库且 SHA-256 匹配后可执行
+当前包没有 Apple 公证，macOS 仍拦截时，在确认 ZIP 来自官方 Release 且 SHA-256 匹配后可执行
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CaliphBar.app

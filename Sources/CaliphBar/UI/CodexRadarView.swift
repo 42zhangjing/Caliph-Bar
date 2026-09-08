@@ -97,7 +97,9 @@ struct CodexRadarDetailStrip: View {
     @ObservedObject private var radar = CodexRadarStore.shared
     @ObservedObject private var l10n = L10n.shared
 
-    private let sourceURL = URL(string: "https://codexradar.com/")!
+    private var sourceURL: URL {
+        radar.snapshot?.sourceURL ?? URL(string: "https://codexradar.com/")!
+    }
 
     var body: some View {
         Link(destination: sourceURL) {
@@ -135,9 +137,19 @@ struct CodexRadarDetailStrip: View {
                         Text(l10n.isChinese ? "本机确认" : "LOCAL")
                             .font(.system(size: 8, weight: .bold, design: .rounded))
                             .foregroundStyle(.green.opacity(0.9))
-                        Text("\(Int((confirmation.beforeRemaining * 100).rounded()))→\(Int((confirmation.afterRemaining * 100).rounded()))%")
+                        Text(confirmationText(confirmation))
                             .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.52))
+                    }
+                } else if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(l10n.isChinese ? "预计" : "TARGET")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.85))
+                        Text(formattedTargetTime(closesAt))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
                     }
                 } else if let probability = radar.snapshot?.probability24h {
                     VStack(alignment: .trailing, spacing: 1) {
@@ -189,9 +201,33 @@ struct CodexRadarDetailStrip: View {
     }
 
     private var detailText: String {
+        if let announcement = radar.snapshot?.announcement {
+            if let lead = announcement.lead, !lead.isEmpty {
+                return "\(announcement.headline) (\(lead))"
+            }
+            return announcement.headline
+        }
+        if radar.snapshot?.windowOpen == true, let message = radar.snapshot?.message, !message.isEmpty {
+            return message
+        }
+        if radar.signal == .stale {
+            return CodexRadarPresentation.conciseDetail(for: .stale, isChinese: l10n.isChinese)
+        }
         if let summary = radar.snapshot?.summary, !summary.isEmpty {
             return summary
         }
         return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+    }
+
+    private func confirmationText(_ c: CodexLocalResetConfirmation) -> String {
+        let before = Int((c.beforeRemaining * 100).rounded())
+        let after = Int((c.afterRemaining * 100).rounded())
+        return "\(before)→\(after)%"
+    }
+
+    private func formattedTargetTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }

@@ -1,6 +1,6 @@
 # Codex Radar 公共情报层
 
-当前状态：个人版 CaliphBar 已实现 V1。
+当前状态：CaliphBar 已实现 V1。
 
 CaliphBar 把 Codex Radar 与账户真实额度严格分开。应用每五分钟读取一次 `https://codexradar.com/current.json`，使用独立缓存，在 Codex 侧边模块上显示简短信号；公共信号明显增强时，还可以发送去重后的通知。
 
@@ -148,7 +148,7 @@ Radar 请求只读取公共数据，不包含 Claude、Codex 或 Antigravity 凭
 
 本机确认完全在设备上计算。CaliphBar 不得把私人额度历史上传给 Radar 数据源。
 
-当前私人版本应在代码、帮助信息和来源链接中保留 Codex Radar 身份。若将来公开分发或商业化，发布前必须重新核对其使用条款、署名与访问频率要求。
+当前开源版本在代码、帮助信息和来源链接中均完整保留了 Codex Radar 身份与原帖来源。若将来进行大规模分发或商业化，应核对数据源最新的使用条款、署名与访问频率要求。
 
 ## V1 完成条件
 

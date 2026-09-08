@@ -19,11 +19,36 @@ enum CodexRadarSignal: String, Codable, Sendable {
     }
 }
 
+struct CodexRadarAnnouncement: Codable, Equatable, Sendable {
+    let headline: String
+    let lead: String?
+    let detail: String?
+    let closesAt: Date?
+    let sourceURL: URL?
+
+    init(
+        headline: String,
+        lead: String? = nil,
+        detail: String? = nil,
+        closesAt: Date? = nil,
+        sourceURL: URL? = nil
+    ) {
+        self.headline = headline
+        self.lead = lead
+        self.detail = detail
+        self.closesAt = closesAt
+        self.sourceURL = sourceURL
+    }
+}
+
 struct CodexRadarSnapshot: Codable, Equatable, Sendable {
     let windowOpen: Bool?
     let status: String?
     let recommendedAction: String?
     let message: String?
+    let windowTitle: String?
+    let windowScope: String?
+    let openedAt: Date?
     let predictionLevel: String?
     let probability24h: Double?
     let probability48h: Double?
@@ -32,14 +57,21 @@ struct CodexRadarSnapshot: Codable, Equatable, Sendable {
     let sourceURL: URL?
     let sourceUpdatedAt: Date?
     let fetchedAt: Date
+    let announcement: CodexRadarAnnouncement?
 
     func signal(now: Date = Date()) -> CodexRadarSignal {
+        // Active reset window or active unexpired announcement always takes precedence as a HOT signal
+        let isWindowActive = windowOpen == true && (closedAt == nil || (closedAt ?? .distantPast) > now)
+        let hasActiveAnnouncement = announcement?.closesAt.map { $0 > now } ?? false
+
+        if isWindowActive || hasActiveAnnouncement {
+            return .hot
+        }
+
         let freshnessDate = sourceUpdatedAt ?? fetchedAt
         if now.timeIntervalSince(freshnessDate) > 2 * 60 * 60 {
             return .stale
         }
-
-        if windowOpen == true { return .hot }
 
         let words = [status, predictionLevel, recommendedAction, summary]
             .compactMap { $0?.lowercased() }
@@ -205,18 +237,30 @@ final class CodexRadarStore: ObservableObject {
         content.title = "Codex Reset Radar"
         if l10n.isChinese {
             if current == .hot {
-                content.body = snapshot.windowOpen == true
-                    ? "检测到新的额度重置窗口信号。"
-                    : "检测到高强度额度重置信号。"
+                if let ann = snapshot.announcement {
+                    content.body = "\(ann.headline)：\(ann.lead ?? ann.detail ?? "官方重置窗口开启")"
+                } else if snapshot.windowOpen == true {
+                    content.body = "检测到新的额度重置窗口信号。"
+                } else {
+                    content.body = "检测到高强度额度重置信号。"
+                }
             } else if let probability = snapshot.probability24h {
                 content.body = "重置信号升至关注状态，24 小时概率 \(Int((probability * 100).rounded()))%。"
             } else {
                 content.body = "重置信号升至关注状态。"
             }
         } else {
-            content.body = current == .hot
-                ? "A strong Codex reset signal was detected."
-                : "Codex reset intelligence moved to WATCH."
+            if current == .hot {
+                if let ann = snapshot.announcement {
+                    content.body = "\(ann.headline) - \(ann.lead ?? "Reset window active")"
+                } else {
+                    content.body = snapshot.windowOpen == true
+                        ? "A new Codex quota reset window was detected."
+                        : "A strong Codex reset signal was detected."
+                }
+            } else {
+                content.body = "Codex reset intelligence moved to WATCH."
+            }
         }
         content.sound = .default
         UNUserNotificationCenter.current().add(
@@ -276,31 +320,95 @@ final class CodexRadarStore: ObservableObject {
 }
 
 private struct CodexRadarClient: Sendable {
-    private let url = URL(string: "https://codexradar.com/current.json")!
+    private let jsonURL = URL(string: "https://codexradar.com/current.json")!
+    private let homeURL = URL(string: "https://codexradar.com/")!
 
     func fetch() async throws -> CodexRadarSnapshot {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("CaliphBar/0.2 personal-macOS-client", forHTTPHeaderField: "User-Agent")
-
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 8
         configuration.timeoutIntervalForResource = 10
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
 
+        var request = URLRequest(url: jsonURL)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("CaliphBar/0.2 personal-macOS-client", forHTTPHeaderField: "User-Agent")
+
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        return try CodexRadarParser.parse(data)
+
+        var announcement: CodexRadarAnnouncement?
+        do {
+            var homeRequest = URLRequest(url: homeURL)
+            homeRequest.timeoutInterval = 5
+            homeRequest.cachePolicy = .reloadIgnoringLocalCacheData
+            homeRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+            homeRequest.setValue("CaliphBar/0.2 personal-macOS-client", forHTTPHeaderField: "User-Agent")
+
+            let (homeData, homeResponse) = try await session.data(for: homeRequest)
+            if let homeHTTP = homeResponse as? HTTPURLResponse, (200..<300).contains(homeHTTP.statusCode),
+               let html = String(data: homeData, encoding: .utf8) {
+                announcement = CodexRadarParser.parseAnnouncement(html: html)
+            }
+        } catch {
+            // HTML announcement fetching is auxiliary; failure does not affect the primary snapshot
+        }
+
+        return try CodexRadarParser.parse(data, announcement: announcement)
     }
 }
 
 private enum CodexRadarParser {
-    static func parse(_ data: Data, fetchedAt: Date = Date()) throws -> CodexRadarSnapshot {
+    static func parseAnnouncement(html: String) -> CodexRadarAnnouncement? {
+        guard html.contains("site-announcement") else { return nil }
+
+        func extract(pattern: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+                return nil
+            }
+            let nsString = html as NSString
+            let range = NSRange(location: 0, length: nsString.length)
+            guard let match = regex.firstMatch(in: html, options: [], range: range),
+                  match.numberOfRanges > 1 else { return nil }
+            let matchRange = match.range(at: 1)
+            guard matchRange.location != NSNotFound else { return nil }
+            let extracted = nsString.substring(with: matchRange)
+                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return extracted.isEmpty ? nil : extracted
+        }
+
+        let headline = extract(pattern: "class=[\"']site-announcement-headline[\"'][^>]*>(.*?)</strong>")
+            ?? extract(pattern: "class=[\"']site-announcement-headline[\"'][^>]*>(.*?)</")
+        guard let headline else { return nil }
+
+        let lead = extract(pattern: "class=[\"']site-announcement-lead[\"'][^>]*>(.*?)</span>")
+            ?? extract(pattern: "class=[\"']site-announcement-lead[\"'][^>]*>(.*?)</")
+        let detail = extract(pattern: "class=[\"']site-announcement-reset-detail[\"'][^>]*>(.*?)</p>")
+            ?? extract(pattern: "class=[\"']site-announcement-reset-detail[\"'][^>]*>(.*?)</")
+        let closesAtRaw = extract(pattern: "data-window-closes-at=[\"']([^\"']+)[\"']")
+        let closesAt = closesAtRaw.flatMap { date($0) }
+        let sourceURL = extract(pattern: "class=[\"'][^\"']*site-announcement-source[^\"']*[\"']\\s+href=[\"']([^\"']+)[\"']")
+            .flatMap { URL(string: $0) }
+
+        return CodexRadarAnnouncement(
+            headline: headline,
+            lead: lead,
+            detail: detail,
+            closesAt: closesAt,
+            sourceURL: sourceURL
+        )
+    }
+
+    static func parse(
+        _ data: Data,
+        announcement: CodexRadarAnnouncement? = nil,
+        fetchedAt: Date = Date()
+    ) throws -> CodexRadarSnapshot {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw URLError(.cannotParseResponse)
         }
@@ -312,6 +420,9 @@ private enum CodexRadarParser {
         let status = string(window?["status"] ?? root["status"])
         let action = string(window?["action"] ?? root["recommended_action"] ?? root["recommendedAction"])
         let message = string(window?["message"] ?? root["message"])
+        let windowTitle = string(window?["title"])
+        let windowScope = string(window?["scope"])
+        let openedAt = date(window?["opened_at"])
         let predictionLevel = string(prediction?["level"] ?? root["prediction_level"])
         let probability24h = probability(prediction?["probability_24h"] ?? prediction?["probability24h"] ?? root["probability_24h"])
         let probability48h = probability(prediction?["probability_48h"] ?? prediction?["probability48h"] ?? root["probability_48h"])
@@ -324,11 +435,12 @@ private enum CodexRadarParser {
             date(prediction?["updated_at"]),
             date(root["monitored_at"]),
             date(root["updated_at"]),
-            date(window?["opened_at"]),
+            openedAt,
             closedAt,
+            announcement?.closesAt,
         ].compactMap { $0 }.max()
 
-        guard windowOpen != nil || status != nil || predictionLevel != nil || probability24h != nil || summary != nil else {
+        guard windowOpen != nil || status != nil || predictionLevel != nil || probability24h != nil || summary != nil || announcement != nil else {
             throw URLError(.cannotParseResponse)
         }
 
@@ -337,14 +449,18 @@ private enum CodexRadarParser {
             status: status,
             recommendedAction: action,
             message: message,
+            windowTitle: windowTitle,
+            windowScope: windowScope,
+            openedAt: openedAt,
             predictionLevel: predictionLevel,
             probability24h: probability24h,
             probability48h: probability48h,
             summary: summary,
             closedAt: closedAt,
-            sourceURL: sourceURL,
+            sourceURL: announcement?.sourceURL ?? sourceURL,
             sourceUpdatedAt: updated,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            announcement: announcement
         )
     }
 

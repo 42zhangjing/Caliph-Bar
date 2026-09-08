@@ -2,8 +2,6 @@
 
 CaliphBar 是一款轻量的 macOS 菜单栏应用，用来查看 Claude Code、Codex 和 Antigravity 的额度与重置时间。它可以将一条小型侧栏常驻在屏幕边缘，也可从菜单栏打开完整管理面板。
 
-> 当前仓库为私有项目。GitHub Release 只对已授权的仓库成员可见。
-
 ## 下载与安装
 
 从仓库的 [Releases](https://github.com/42zhangjing/Caliph-Bar/releases) 页面下载最新的 `CaliphBar-v*-macOS-universal.zip`。压缩包同时支持 Apple Silicon 和 Intel Mac，系统要求为 macOS 13 或更高版本。
@@ -16,7 +14,7 @@ CaliphBar 是一款轻量的 macOS 菜单栏应用，用来查看 Claude Code、
 
 更新时不需要清理偏好设置或缓存。新旧版本使用同一个 Bundle ID，替换 App 不会丢失语言、侧栏位置等设置。不要同时运行两份 CaliphBar。
 
-当前测试包使用 ad-hoc 签名，尚未经过 Apple Developer ID 公证。如果 macOS 仍然拦截，可在确认文件来自本私有仓库后执行
+当前测试包使用 ad-hoc 签名，尚未经过 Apple Developer ID 公证。如果 macOS 仍然拦截，可在确认文件来自官方 Release 后执行
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CaliphBar.app
@@ -163,4 +161,4 @@ CaliphBar 是本地优先应用。Claude 凭据只会发往 Anthropic 自己的 
 
 ## 开源与签名说明
 
-项目当前保留 MIT `LICENSE` 和第三方声明，仓库可见性为 Private。`build-app.sh` 使用 ad-hoc 签名保持稳定 Bundle ID。如需无警告的公开发行，还需要稳定的 Apple Developer ID 签名和公证。
+项目采用 MIT License 开源，保留第三方版权与声明。`build-app.sh` 使用 ad-hoc 签名保持稳定 Bundle ID。如需无警告的公开发行，还需要稳定的 Apple Developer ID 签名和公证。

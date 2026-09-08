@@ -24,7 +24,7 @@ git log -5 --oneline
 - GitHub 保存持久的项目记忆和标准代码。
 - ChatGPT、Codex、Antigravity 和 Claude 都可以作为可替换的维护者。
 - 日常 Git 机械操作不应由用户手工协调。
-- 仓库当前为 Private。Release 资产、Actions 日志和 PR 不得包含任何凭据或私人数据。
+- 仓库为公开开源项目。Release 资产、Actions 日志和 PR 不得包含任何凭据或私人数据。
 
 能通过 GitHub 完成的实质改动，通常执行下面的完整链路。
 
@@ -132,7 +132,7 @@ CaliphBar 有两个必须独立的数据层。
 
 - 构建版本、安装方式、ad-hoc 签名限制和 Release 流程以 `docs/RELEASE.md` 为准。
 - 发布标签必须与 App 内版本号一致。
-- 当前 Release 必须标为私有测试版/预发布，直到完成 Developer ID 签名和公证。
+- 当前 Release 标为预发布版本（Prerelease），直到完成 Developer ID 签名和公证。
 - 替换已安装 App 时，先退出旧进程，并将旧 App 移到废纸篓作为可恢复备份。
 
 本机验收指令模板

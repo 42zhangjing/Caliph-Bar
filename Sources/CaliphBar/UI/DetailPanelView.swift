@@ -281,7 +281,12 @@ private struct CodexMiniRadarInlineBlock: View {
                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.82))
                 Spacer()
-                if let prob = radar.snapshot?.probability24h {
+                if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
+                    Text(l10n.isChinese ? "预计 \(formattedTime(closesAt))" : "Target \(formattedTime(closesAt))")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                } else if let prob = radar.snapshot?.probability24h {
                     Text("24H \(Int((prob * 100).rounded()))%")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
@@ -292,20 +297,33 @@ private struct CodexMiniRadarInlineBlock: View {
                     .foregroundStyle(CodexRadarPresentation.statusColor(for: radar.signal))
             }
 
-            if let summary = radar.snapshot?.summary, !summary.isEmpty {
+            if let ann = radar.snapshot?.announcement {
+                Text("\(ann.headline)：\(ann.lead ?? ann.detail ?? "")")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if radar.snapshot?.windowOpen == true, let message = radar.snapshot?.message, !message.isEmpty {
+                Text(message)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let summary = radar.snapshot?.summary, !summary.isEmpty {
                 Text(summary)
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.50))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if let message = radar.snapshot?.message, !message.isEmpty {
-                Text(message)
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.white.opacity(0.50))
-                    .lineLimit(1)
             }
         }
         .padding(.top, 2)
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 
@@ -419,21 +437,36 @@ struct SideRadarPanelView: View {
                     .foregroundStyle(.white.opacity(0.40))
 
                 HStack(spacing: 10) {
-                    probabilityCell("24H", value: radar.snapshot?.probability24h)
-                    probabilityCell("48H", value: radar.snapshot?.probability48h)
+                    if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
+                        countdownCell(target: closesAt)
+                        targetTimeCell(target: closesAt)
+                    } else if radar.snapshot?.windowOpen == true {
+                        activeWindowCell
+                        scopeCell
+                    } else {
+                        probabilityCell("24H", value: radar.snapshot?.probability24h)
+                        probabilityCell("48H", value: radar.snapshot?.probability48h)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
+                    if let headline = headlineText {
+                        Text(headline)
+                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .lineLimit(1)
+                    }
+
                     Text(detailText)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.68))
-                        .lineLimit(3)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .lineLimit(headlineText != nil ? 3 : 4)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let message = radar.snapshot?.message, !message.isEmpty {
-                        Text(message)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.42))
+                    if let sub = subDetailText, !sub.isEmpty {
+                        Text(sub)
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(Color.white.opacity(0.42))
                             .lineLimit(1)
                     }
                 }
@@ -474,6 +507,106 @@ struct SideRadarPanelView: View {
         .padding(SideDetailPanelLayout.shadowPadding)
     }
 
+    private func countdownCell(target: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 1.0)) { context in
+            let remaining = max(0, target.timeIntervalSince(context.date))
+            let hours = Int(remaining) / 3600
+            let minutes = (Int(remaining) % 3600) / 60
+            let seconds = Int(remaining) % 60
+            let formatted = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(l10n.isChinese ? "距离预计重置" : "RESET IN")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                Text(formatted)
+                    .font(.system(size: 19, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.28), lineWidth: 0.75)
+            )
+        }
+    }
+
+    private func targetTimeCell(target: Date) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let timeString = formatter.string(from: target)
+
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(l10n.isChinese ? "预计节点" : "TARGET TIME")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.38))
+                Spacer()
+                Text(l10n.isChinese ? "官方确认" : "CONFIRMED")
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.25, green: 0.86, blue: 0.66))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(red: 0.25, green: 0.86, blue: 0.66).opacity(0.14))
+                    )
+            }
+            Text(timeString)
+                .font(.system(size: 19, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.92))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.04)))
+    }
+
+    private var activeWindowCell: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(l10n.isChinese ? "重置窗口" : "RESET WINDOW")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.38))
+                Spacer()
+                Text(l10n.isChinese ? "进行中" : "OPEN")
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.9))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.14)))
+            }
+            Text(l10n.isChinese ? "已开启" : "ACTIVE")
+                .font(.system(size: 19, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.red.opacity(0.92))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.red.opacity(0.08)))
+    }
+
+    private var scopeCell: some View {
+        let scope = radar.snapshot?.windowScope ?? (l10n.isChinese ? "所有付费计划" : "Paid Plans")
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(l10n.isChinese ? "受惠计划" : "SCOPE")
+                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.38))
+            Text(scope)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.92))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.04)))
+    }
+
     private func probabilityCell(_ label: String, value: Double?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
@@ -501,15 +634,50 @@ struct SideRadarPanelView: View {
         )
     }
 
+    private var headlineText: String? {
+        if let announcement = radar.snapshot?.announcement {
+            if let lead = announcement.lead, !lead.isEmpty {
+                return "\(announcement.headline) · \(lead)"
+            }
+            return announcement.headline
+        }
+        if radar.snapshot?.windowOpen == true {
+            return radar.snapshot?.windowTitle ?? (l10n.isChinese ? "Codex 用量限制重置" : "Codex Quota Reset")
+        }
+        return nil
+    }
+
     private var detailText: String {
+        if let announcement = radar.snapshot?.announcement, let detail = announcement.detail, !detail.isEmpty {
+            return detail
+        }
+        if radar.snapshot?.windowOpen == true, let message = radar.snapshot?.message, !message.isEmpty {
+            return message
+        }
+        if radar.signal == .stale {
+            return CodexRadarPresentation.conciseDetail(for: .stale, isChinese: l10n.isChinese)
+        }
         if let summary = radar.snapshot?.summary, !summary.isEmpty {
             return summary
         }
         return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
     }
 
+    private var subDetailText: String? {
+        if radar.snapshot?.announcement != nil {
+            var parts: [String] = []
+            if let msg = radar.snapshot?.message, !msg.isEmpty { parts.append(msg) }
+            if let scope = radar.snapshot?.windowScope, !scope.isEmpty { parts.append(scope) }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+        if radar.snapshot?.windowOpen == true {
+            return radar.snapshot?.windowScope
+        }
+        return nil
+    }
+
     private var sourceURL: URL {
-        URL(string: "https://codexradar.com/")!
+        radar.snapshot?.sourceURL ?? URL(string: "https://codexradar.com/")!
     }
 }
 
