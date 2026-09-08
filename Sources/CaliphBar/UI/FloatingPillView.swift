@@ -327,8 +327,12 @@ private struct SilhouetteRadarNode: View {
             for: radar.signal,
             isChinese: l10n.isChinese
         )
-        guard radar.snapshot?.probability24h != nil else { return state }
-        return "\(state), 24H \(probabilityLabel)"
+        // probabilityLabel returns literal "HOT" when active — avoid "24H HOT" which is nonsense
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return state
+        }
+        guard let probability = radar.snapshot?.probability24h else { return state }
+        return "\(state), 24H \(Int((probability * 100).rounded()))%"
     }
 }
 
@@ -400,8 +404,12 @@ private struct RadarPillButton: View {
             for: radar.signal,
             isChinese: l10n.isChinese
         )
-        guard radar.snapshot?.probability24h != nil else { return state }
-        return "\(state), 24H \(probabilityLabel)"
+        // probabilityLabel returns literal "HOT" when active — avoid "24H HOT" which is nonsense
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return state
+        }
+        guard let probability = radar.snapshot?.probability24h else { return state }
+        return "\(state), 24H \(Int((probability * 100).rounded()))%"
     }
 }
 

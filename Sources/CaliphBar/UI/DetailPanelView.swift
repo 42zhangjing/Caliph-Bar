@@ -588,14 +588,14 @@ struct SideRadarPanelView: View {
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.38))
                 Spacer()
-                Text(l10n.isChinese ? "官方确认" : "CONFIRMED")
+                Text(l10n.isChinese ? "已公告" : "ANNOUNCED")
                     .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.25, green: 0.86, blue: 0.66))
+                    .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(red: 0.25, green: 0.86, blue: 0.66).opacity(0.14))
+                            .fill(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.14))
                     )
             }
             Text(timeString)
