@@ -54,9 +54,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>$APP_NAME</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.7</string>
+  <string>0.2.8</string>
   <key>CFBundleVersion</key>
-  <string>9</string>
+  <string>10</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>
@@ -76,3 +76,6 @@ codesign --verify --deep --strict "$APP"
 lipo -info "$APP/Contents/MacOS/$APP_NAME"
 
 echo "Built $APP"
+
+# Prevent Spotlight from indexing the build-directory .app as a separate launcher
+touch "$APP/.metadata_never_index"
