@@ -24,6 +24,7 @@ struct CodexRadarAnnouncement: Codable, Equatable, Sendable {
     let lead: String?
     let detail: String?
     let closesAt: Date?
+    let expiredText: String?
     let sourceURL: URL?
 
     init(
@@ -31,12 +32,14 @@ struct CodexRadarAnnouncement: Codable, Equatable, Sendable {
         lead: String? = nil,
         detail: String? = nil,
         closesAt: Date? = nil,
+        expiredText: String? = nil,
         sourceURL: URL? = nil
     ) {
         self.headline = headline
         self.lead = lead
         self.detail = detail
         self.closesAt = closesAt
+        self.expiredText = expiredText
         self.sourceURL = sourceURL
     }
 }
@@ -143,9 +146,7 @@ final class CodexRadarStore: ObservableObject {
         }
 
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
+        rescheduleTimer()
     }
 
     deinit { timer?.invalidate() }
@@ -166,7 +167,25 @@ final class CodexRadarStore: ObservableObject {
                 } else {
                     signal = .offline
                 }
+                rescheduleTimer()
             }
+        }
+    }
+
+    func refreshIfNeeded(olderThan: TimeInterval = 30) {
+        guard !isRefreshing else { return }
+        if let fetchedAt = snapshot?.fetchedAt, Date().timeIntervalSince(fetchedAt) < olderThan {
+            return
+        }
+        refresh()
+    }
+
+    private func rescheduleTimer() {
+        timer?.invalidate()
+        let isHotOrActive = signal == .hot || snapshot?.windowOpen == true || snapshot?.announcement != nil
+        let interval: TimeInterval = isHotOrActive ? 60 : 5 * 60
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
     }
 
@@ -210,6 +229,7 @@ final class CodexRadarStore: ObservableObject {
             UserDefaults.standard.set(data, forKey: Keys.cache)
         }
         notifyIfNeeded(previous: previousSignal, current: signal, snapshot: fresh)
+        rescheduleTimer()
     }
 
     private func notifyIfNeeded(
@@ -392,6 +412,7 @@ private enum CodexRadarParser {
             ?? extract(pattern: "class=[\"']site-announcement-reset-detail[\"'][^>]*>(.*?)</")
         let closesAtRaw = extract(pattern: "data-window-closes-at=[\"']([^\"']+)[\"']")
         let closesAt = closesAtRaw.flatMap { date($0) }
+        let expiredText = extract(pattern: "data-expired-text=[\"']([^\"']+)[\"']")
         let sourceURL = extract(pattern: "class=[\"'][^\"']*site-announcement-source[^\"']*[\"']\\s+href=[\"']([^\"']+)[\"']")
             .flatMap { URL(string: $0) }
 
@@ -400,6 +421,7 @@ private enum CodexRadarParser {
             lead: lead,
             detail: detail,
             closesAt: closesAt,
+            expiredText: expiredText,
             sourceURL: sourceURL
         )
     }

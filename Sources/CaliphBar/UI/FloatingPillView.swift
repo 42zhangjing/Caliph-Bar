@@ -308,12 +308,18 @@ private struct SilhouetteRadarNode: View {
     }
 
     private var probabilityLabel: String {
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return "HOT"
+        }
         guard let value = radar.snapshot?.probability24h else { return "RADAR" }
         return "\(Int((value * 100).rounded()))%"
     }
 
     private var probabilityColor: Color {
-        .white.opacity(0.78)
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return Color.red.opacity(0.9)
+        }
+        return .white.opacity(0.78)
     }
 
     private var accessibilityValue: String {
@@ -356,7 +362,7 @@ private struct RadarPillButton: View {
                 Text(probabilityLabel)
                     .font(.system(size: SideNotchLayout.percentageFontSize, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(probabilityColor)
                     .frame(height: 12)
             }
             .frame(width: SideNotchLayout.itemSize.width, height: SideNotchLayout.itemSize.height)
@@ -375,8 +381,18 @@ private struct RadarPillButton: View {
     }
 
     private var probabilityLabel: String {
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return "HOT"
+        }
         guard let value = radar.snapshot?.probability24h else { return "RADAR" }
         return "\(Int((value * 100).rounded()))%"
+    }
+
+    private var probabilityColor: Color {
+        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            return Color.red.opacity(0.9)
+        }
+        return .white.opacity(0.78)
     }
 
     private var accessibilityValue: String {

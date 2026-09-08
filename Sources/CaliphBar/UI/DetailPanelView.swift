@@ -286,6 +286,10 @@ private struct CodexMiniRadarInlineBlock: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                } else if radar.snapshot?.windowOpen == true, radar.snapshot?.announcement != nil {
+                    Text(l10n.isChinese ? "等待确认" : "Pending")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
                 } else if let prob = radar.snapshot?.probability24h {
                     Text("24H \(Int((prob * 100).rounded()))%")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -440,6 +444,10 @@ struct SideRadarPanelView: View {
                     if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
                         countdownCell(target: closesAt)
                         targetTimeCell(target: closesAt)
+                    } else if let announcement = radar.snapshot?.announcement, radar.snapshot?.windowOpen == true {
+                        let text = announcement.expiredText ?? (l10n.isChinese ? "等待官方确认重置完成" : "Pending Official Confirmation")
+                        pendingConfirmationCell(text: text)
+                        scopeCell
                     } else if radar.snapshot?.windowOpen == true {
                         activeWindowCell
                         scopeCell
@@ -505,6 +513,38 @@ struct SideRadarPanelView: View {
             .stroke(Color.white.opacity(0.065), lineWidth: 0.75)
         )
         .padding(SideDetailPanelLayout.shadowPadding)
+        .onAppear {
+            radar.refreshIfNeeded()
+        }
+    }
+
+    private func pendingConfirmationCell(text: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(l10n.isChinese ? "重置状态" : "STATUS")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                Spacer()
+                Text(l10n.isChinese ? "进行中" : "OPEN")
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.9))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.14)))
+            }
+            Text(text)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.10)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.25), lineWidth: 0.75)
+        )
     }
 
     private func countdownCell(target: Date) -> some View {

@@ -151,6 +151,15 @@ struct CodexRadarDetailStrip: View {
                             .monospacedDigit()
                             .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
                     }
+                } else if radar.snapshot?.windowOpen == true, radar.snapshot?.announcement != nil {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(l10n.isChinese ? "状态" : "STATE")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14).opacity(0.85))
+                        Text(l10n.isChinese ? "等待确认" : "WAITING")
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                    }
                 } else if let probability = radar.snapshot?.probability24h {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("24H")
