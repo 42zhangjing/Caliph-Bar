@@ -17,7 +17,7 @@ enum UsageNotifier {
 
     static func check(snapshots: [ProviderSnapshot], enabled: Bool) {
         guard enabled else { return }
-        for snapshot in snapshots where snapshot.source == .live || snapshot.source == .estimated {
+        for snapshot in snapshots where snapshot.source == .live {
             for window in snapshot.windows {
                 check(snapshot: snapshot, window: window)
             }
