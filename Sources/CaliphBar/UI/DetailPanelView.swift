@@ -306,9 +306,18 @@ private struct CodexMiniRadarInlineBlock: View {
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.68))
                 }
-                Text(CodexRadarPresentation.statusLabel(for: radar.signal, isChinese: l10n.isChinese, compact: true))
-                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(CodexRadarPresentation.statusColor(for: radar.signal))
+                if let ann = radar.snapshot?.announcement, {
+                    let text = [ann.headline, ann.lead, ann.detail].compactMap { $0 }.joined(separator: " ").lowercased()
+                    return ["已完成", "站长确认", "completed", "done"].contains(where: { text.contains($0) })
+                }() {
+                    Text(l10n.isChinese ? "已完成" : "Done")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.25, green: 0.86, blue: 0.66))
+                } else {
+                    Text(CodexRadarPresentation.statusLabel(for: radar.signal, isChinese: l10n.isChinese, compact: true))
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(CodexRadarPresentation.statusColor(for: radar.signal))
+                }
             }
 
             if let ann = radar.snapshot?.announcement {
@@ -716,12 +725,25 @@ struct SideRadarPanelView: View {
         .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.04)))
     }
 
+    private var isCompletedState: Bool {
+        if let ann = radar.snapshot?.announcement {
+            return isCompletionAnnouncement(ann)
+        }
+        return false
+    }
+
     private var signalColor: Color {
-        CodexRadarPresentation.statusColor(for: radar.signal)
+        if isCompletedState {
+            return Color(red: 0.25, green: 0.86, blue: 0.66)
+        }
+        return CodexRadarPresentation.statusColor(for: radar.signal)
     }
 
     private var signalLabel: String {
-        CodexRadarPresentation.statusLabel(
+        if isCompletedState {
+            return l10n.isChinese ? "已完成" : "DONE"
+        }
+        return CodexRadarPresentation.statusLabel(
             for: radar.signal,
             isChinese: l10n.isChinese,
             compact: true

@@ -1,6 +1,12 @@
 import SwiftUI
 import CaliphBarCore
 
+/// Shared helper: true when the public announcement headline/detail confirms the reset is done.
+private func isRadarCompletionAnnouncement(_ ann: CodexRadarAnnouncement) -> Bool {
+    let text = [ann.headline, ann.lead, ann.detail].compactMap { $0 }.joined(separator: " ").lowercased()
+    return ["已完成", "站长确认", "completed", "done"].contains(where: { text.contains($0) })
+}
+
 @MainActor
 final class PillPositionModel: ObservableObject {
     @Published var side: EdgeSide
@@ -309,6 +315,9 @@ private struct SilhouetteRadarNode: View {
 
     private var probabilityLabel: String {
         if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
+                return "✓"
+            }
             return "HOT"
         }
         guard let value = radar.snapshot?.probability24h else { return "RADAR" }
@@ -317,6 +326,9 @@ private struct SilhouetteRadarNode: View {
 
     private var probabilityColor: Color {
         if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
+                return Color(red: 0.25, green: 0.86, blue: 0.66)
+            }
             return Color.red.opacity(0.9)
         }
         return .white.opacity(0.78)
@@ -386,6 +398,9 @@ private struct RadarPillButton: View {
 
     private var probabilityLabel: String {
         if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
+                return "✓"
+            }
             return "HOT"
         }
         guard let value = radar.snapshot?.probability24h else { return "RADAR" }
@@ -394,6 +409,9 @@ private struct RadarPillButton: View {
 
     private var probabilityColor: Color {
         if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+            if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
+                return Color(red: 0.25, green: 0.86, blue: 0.66)
+            }
             return Color.red.opacity(0.9)
         }
         return .white.opacity(0.78)
