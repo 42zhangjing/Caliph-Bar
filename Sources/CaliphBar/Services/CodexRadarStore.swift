@@ -479,7 +479,7 @@ private enum CodexRadarParser {
             probability48h: probability48h,
             summary: summary,
             closedAt: closedAt,
-            sourceURL: announcement?.sourceURL ?? sourceURL,
+            sourceURL: sourceURL,  // announcement.sourceURL is attribution only, not the primary link
             sourceUpdatedAt: updated,
             fetchedAt: fetchedAt,
             announcement: announcement

@@ -98,7 +98,7 @@ struct CodexRadarDetailStrip: View {
     @ObservedObject private var l10n = L10n.shared
 
     private var sourceURL: URL {
-        radar.snapshot?.sourceURL ?? URL(string: "https://codexradar.com/")!
+        URL(string: "https://codexradar.com/")!
     }
 
     var body: some View {

@@ -286,10 +286,20 @@ private struct CodexMiniRadarInlineBlock: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
-                } else if radar.snapshot?.windowOpen == true, radar.snapshot?.announcement != nil {
-                    Text(l10n.isChinese ? "等待确认" : "Pending")
-                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                } else if radar.snapshot?.windowOpen == true, let ann = radar.snapshot?.announcement {
+                    let isComplete = { () -> Bool in
+                        let text = [ann.headline, ann.lead, ann.detail].compactMap { $0 }.joined(separator: " ").lowercased()
+                        return ["已完成", "站长确认", "completed", "done"].contains(where: { text.contains($0) })
+                    }()
+                    if isComplete {
+                        Text(l10n.isChinese ? "已完成" : "Done")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.25, green: 0.86, blue: 0.66))
+                    } else {
+                        Text(l10n.isChinese ? "等待确认" : "Pending")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.14))
+                    }
                 } else if let prob = radar.snapshot?.probability24h {
                     Text("24H \(Int((prob * 100).rounded()))%")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -445,8 +455,12 @@ struct SideRadarPanelView: View {
                         countdownCell(target: closesAt)
                         targetTimeCell(target: closesAt)
                     } else if let announcement = radar.snapshot?.announcement, radar.snapshot?.windowOpen == true {
-                        let text = announcement.expiredText ?? (l10n.isChinese ? "等待官方确认重置完成" : "Pending Official Confirmation")
-                        pendingConfirmationCell(text: text)
+                        if isCompletionAnnouncement(announcement) {
+                            confirmedCompleteCell(headline: announcement.headline)
+                        } else {
+                            let text = announcement.expiredText ?? (l10n.isChinese ? "等待官方确认重置完成" : "Pending Official Confirmation")
+                            pendingConfirmationCell(text: text)
+                        }
                         scopeCell
                     } else if radar.snapshot?.windowOpen == true {
                         activeWindowCell
@@ -516,6 +530,46 @@ struct SideRadarPanelView: View {
         .onAppear {
             radar.refreshIfNeeded()
         }
+    }
+
+    /// Returns true if the announcement headline/lead/detail explicitly indicates reset is complete
+    private func isCompletionAnnouncement(_ ann: CodexRadarAnnouncement) -> Bool {
+        let text = [ann.headline, ann.lead, ann.detail]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        let completionKeywords = ["已完成", "完成确认", "站长确认", "reset complete", "completed", "confirmed complete", "done"]
+        return completionKeywords.contains(where: text.contains)
+    }
+
+    private func confirmedCompleteCell(headline: String) -> some View {
+        let green = Color(red: 0.25, green: 0.86, blue: 0.66)
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(l10n.isChinese ? "重置状态" : "STATUS")
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(green)
+                Spacer()
+                Text(l10n.isChinese ? "已完成" : "DONE")
+                    .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(green)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(green.opacity(0.14)))
+            }
+            Text(headline)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(green)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(green.opacity(0.10)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(green.opacity(0.25), lineWidth: 0.75)
+        )
     }
 
     private func pendingConfirmationCell(text: String) -> some View {
@@ -717,7 +771,8 @@ struct SideRadarPanelView: View {
     }
 
     private var sourceURL: URL {
-        radar.snapshot?.sourceURL ?? URL(string: "https://codexradar.com/")!
+        // "查看完整" always opens the Codex Radar homepage, not a third-party source post
+        URL(string: "https://codexradar.com/")!
     }
 }
 
