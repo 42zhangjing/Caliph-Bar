@@ -24,7 +24,7 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 
 ### 额度数据
 
-- **Claude Code**  可用 Claude Code 凭据存在时，从 Anthropic OAuth usage 接口读取准确账户用量。后台 Keychain 读取不会弹出系统授权框。实时数据暂时不可用时，优先保留最近一次有效值，之后才使用本机 JSONL 日志估算，并明确标记为 `ESTIMATED`。
+- **Claude Code**  可用 Claude Code 凭据存在时，从 Anthropic OAuth usage 接口读取准确账户用量。后台 Keychain 读取不会弹出系统授权框。实时数据暂时不可用时，最近一次有效值仅在详情中作为 `STALE` 参考；没有有效快照时显示 `OFFLINE` 并保留失败原因。本地日志中的费用不能推算订阅额度，因此不再用于估算剩余额度。
 - **Codex**  优先通过本机 Codex `app-server` 的 `account/rateLimits/read` 读取当前额度。本地 rollout JSONL 只是回退数据，过期窗口不会显示为 `LIVE`。CaliphBar 不估算 Codex 额度，也不直接调用 ChatGPT 私有后端。
 - **Antigravity**  从正在运行的 Antigravity 2.x 本机 `language_server` 读取真实 quota summary。也支持已登录且已运行的 `agy` 进程作为本机回退。应用不抓取 Antigravity UI，不调用 Google 远程 OAuth 额度接口。
 - **Reset Radar**  独立读取 Codex Radar 公共结构化摘要，显示额外重置信号和 24/48 小时概率。它属于公共情报，不会改动或冒充用户的真实 Codex 额度。
@@ -46,7 +46,7 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 
 ### 其他功能
 
-- 额度低于设定阈值时，每个窗口只通知一次。
+- 实时读取的额度低于设定阈值时，每个窗口只通知一次；旧数据或估算值不触发额度通知。
 - Radar 只在信号明显升级时通知，避免重复打扰。
 - 支持开机启动。
 - 账户数据每 60 秒自动刷新，Radar 每 5 分钟独立刷新。
@@ -60,6 +60,8 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 - `ESTIMATED`  基于本地记录得出的估算值，不是账户的精确额度。
 - `OFFLINE`  暂时没有可用数据。
 - Radar 的“数据超 2 小时未更新”  表示 24/48 小时概率来自旧缓存，不表示重置机会已经错过。
+
+菜单栏和侧栏的汇总百分比只使用 `LIVE` 数据，取所有已读取额度窗口中最低的剩余比例；例如会话未用但周额度已耗尽时显示 `0%`。其他状态显示 `—`，旧窗口仍可在带状态标识的详情中查看。真实用量为零时仍显示 `100%`。
 
 ## 本地开发与安装
 
@@ -97,7 +99,7 @@ dev.chengyu.caliphbar
 
 ### Claude
 
-CaliphBar 依次检查 `~/.claude/.credentials.json`、macOS Keychain 中的 `Claude Code-credentials`、Anthropic usage 接口、最近的有效快照和本地 Claude 日志估算。后台读取不会主动弹出 Keychain 授权。如果需要授权，只有用户在设置中主动点击“修复权限”才会触发。
+CaliphBar 优先读取 `~/.claude/.credentials.json`；该文件不存在时查询 macOS Keychain 中的 `Claude Code-credentials`，使用找到的凭据调用 Anthropic usage 接口。失败时仅保留最近的有效快照作为旧数据参考，不根据本地 Claude 日志或自设费用预算推算账户额度。后台读取不会主动弹出 Keychain 授权。如果需要授权，只有用户在设置中主动点击“修复权限”才会触发。
 
 ### Codex
 

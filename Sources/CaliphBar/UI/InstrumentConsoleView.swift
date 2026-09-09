@@ -321,7 +321,7 @@ struct InstrumentConsoleView: View {
 
     private func localizedNote(for item: ProviderSnapshot) -> String {
         if item.provider == .gemini { return l10n.geminiUnimplemented }
-        if item.provider == .claude && item.source == .unavailable { return l10n.claudeNotFoundHelp }
+        if item.provider == .claude && item.source == .unavailable { return item.note ?? l10n.claudeNotFoundHelp }
         if item.source == .stale {
             return l10n.isChinese
                 ? "实时读取暂不可用，正在显示本机的旧数据。"

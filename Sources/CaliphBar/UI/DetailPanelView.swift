@@ -247,7 +247,7 @@ struct SideDetailPanelView: View {
     private func localizedNote(for item: ProviderSnapshot) -> String {
         if item.provider == .gemini { return l10n.geminiUnimplemented }
         if item.provider == .claude && item.source == .unavailable {
-            return l10n.claudeNotFoundHelp
+            return item.note ?? l10n.claudeNotFoundHelp
         }
         return item.note ?? l10n.usageUnavailable
     }
