@@ -103,6 +103,8 @@ CaliphBar 依次检查 `~/.claude/.credentials.json`、macOS Keychain 中的 `Cl
 
 CaliphBar 使用只读、有时限的本机 JSON-RPC 交互请求 `account/rateLimits/read`。它不读取 Codex OAuth token，不尝试绕过或延长额度。当 app-server 不可用时，只会从本地 rollout JSONL 中寻找未过期的历史观测。
 
+额度子进程使用 `--disable plugins` 隔离插件初始化，不改全局 Codex 配置。读取设有 30 秒总超时；查询结束、失败、取消和正常退出应用时收尾本次查询的进程组。CLI 不支持该开关时按读取失败处理，不自动重试启用插件。
+
 ### Antigravity
 
 CaliphBar 只连接字面地址 `127.0.0.1` 或 `localhost` 的 Antigravity 本机服务。自签名 TLS 信任放宽不会被应用到远程主机。日志和问题报告中不得出现 CSRF token 或凭据。

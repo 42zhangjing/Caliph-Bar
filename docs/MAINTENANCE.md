@@ -81,6 +81,10 @@ git rev-parse HEAD
 
 优先检查 `app-server` 返回的 `rateLimits` 结构。只读取额度所需字段，不得输出对话内容。实时读取失败时，才检查本地 rollout 的未过期窗口。缺少真实数据时应显示不可用，不得估算。
 
+运行 `python3 scripts/check-codex-probe.py` 验证额度探针的分块响应、stderr 背压、EOF、RPC 错误、无效/过大响应、总超时、取消和退出收尾。脚本编译实际 Swift 传输代码并使用临时假 CLI，不读取真实凭据、不访问网络。
+
+真实环境验收还应确认启动参数包含 `--disable plugins`、额度实时返回、多轮自动刷新不增加 marketplace 暂存，以及查询卡住时正常退出不遗留进程。核对当前 CLI 的实际暂存路径，不要把不存在的错误路径当作“无增长”。不支持插件禁用开关时保留失败状态，不能删掉开关重试或改动全局插件配置。
+
 ### Antigravity
 
 可以检查进程名、PID、loopback 监听端口、响应状态和清理过的 quota bucket 元数据。不得打印 CSRF token 或其他凭据。

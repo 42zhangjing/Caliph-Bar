@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Reads the same live account quota state exposed by the official Codex CLI app-server.
 ///
@@ -7,11 +8,21 @@ import Foundation
 /// Codex OAuth tokens and does not call ChatGPT private HTTP endpoints itself.
 struct CodexAppServerProbe: Sendable {
     func fetchRateLimits() async throws -> CodexRateLimits {
-        try await Task.detached(priority: .utility) {
+        let worker = Task.detached(priority: .utility) {
             let session = try CodexRPCSession()
             defer { session.shutdown() }
-            return try session.fetchRateLimitsOneShot()
-        }.value
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try session.fetchRateLimitsOneShot()
+            } onCancel: {
+                session.cancel()
+            }
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
     }
 }
 
@@ -178,256 +189,186 @@ enum CodexAppServerRateLimitParser {
     }
 }
 
-private final class CodexRPCSession: @unchecked Sendable {
-    private let process = Process()
-    private let stdinPipe = Pipe()
-    private let stdoutPipe = Pipe()
-    private let stderrPipe = Pipe()
-    private let lock = NSLock()
-    private var stdoutBuffer = Data()
-    private var nextID = 1
-    private var didShutdown = false
+/// Owns only the quota probes this app launched, never other Codex processes.
+public enum CodexQuotaProbeLifecycle {
+    fileprivate static let lock = NSLock()
+    fileprivate static var groups: Set<pid_t> = []
+    fileprivate static var stopping = false
 
-    init() throws {
-        guard let executable = Self.resolveExecutable() else {
+    public static func shutdown() {
+        lock.lock()
+        defer { lock.unlock() }
+        stopping = true
+        for pid in groups { kill(-pid, SIGKILL) }
+    }
+}
+
+final class CodexRPCSession: @unchecked Sendable {
+    private var pid: pid_t = 0
+    private let input = Pipe()
+    private let output = Pipe()
+    private let errors = Pipe()
+    private let timeout: TimeInterval
+    private let flushAfter: TimeInterval
+
+    init(executable: String? = nil, timeout: TimeInterval = 30, flushAfter: TimeInterval = 5) throws {
+        guard let executable = executable ?? Self.resolveExecutable() else {
             throw CodexAppServerError.executableNotFound
         }
+        self.timeout = timeout
+        self.flushAfter = flushAfter
 
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["-s", "read-only", "-a", "never", "app-server"]
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.environment = Self.environmentForExecutable(executable)
-
-        do {
-            try process.run()
-        } catch {
-            throw CodexAppServerError.launchFailed(error.localizedDescription)
+        // Sandbox/approval flags do not prevent plugin setup. Disable plugins for this
+        // process only: quota reads must never clone or upgrade marketplace repositories.
+        let arguments = [executable, "--disable", "plugins", "-s", "read-only", "-a", "never", "app-server"]
+        let argv = arguments.map { strdup($0) } + [nil]
+        let envp = Self.environmentForExecutable(executable).map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            argv.forEach { free($0) }
+            envp.forEach { free($0) }
         }
+        var actions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        posix_spawn_file_actions_init(&actions)
+        posix_spawnattr_init(&attributes)
+        defer {
+            posix_spawn_file_actions_destroy(&actions)
+            posix_spawnattr_destroy(&attributes)
+        }
+        for (handle, target) in [
+            (input.fileHandleForReading, STDIN_FILENO),
+            (output.fileHandleForWriting, STDOUT_FILENO),
+            (errors.fileHandleForWriting, STDERR_FILENO),
+        ] {
+            posix_spawn_file_actions_adddup2(&actions, handle.fileDescriptor, target)
+        }
+        // A separate process group lets teardown include Git/helper descendants.
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT))
+        posix_spawnattr_setpgroup(&attributes, 0)
+        CodexQuotaProbeLifecycle.lock.lock()
+        defer { CodexQuotaProbeLifecycle.lock.unlock() }
+        guard !CodexQuotaProbeLifecycle.stopping else { throw CodexAppServerError.closed }
+        let status = argv.withUnsafeBufferPointer { args in
+            envp.withUnsafeBufferPointer { env in
+                posix_spawn(&pid, executable, &actions, &attributes, args.baseAddress!, env.baseAddress!)
+            }
+        }
+        guard status == 0 else {
+            throw CodexAppServerError.launchFailed(String(cString: strerror(status)))
+        }
+        CodexQuotaProbeLifecycle.groups.insert(pid)
+        try? input.fileHandleForReading.close()
+        try? output.fileHandleForWriting.close()
+        try? errors.fileHandleForWriting.close()
+        for fd in [output.fileHandleForReading.fileDescriptor, errors.fileHandleForReading.fileDescriptor] {
+            _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        }
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
     }
 
-    /// Current alpha builds of the bundled Codex CLI can buffer stdout while stdin stays open.
-    /// Queue the read-only handshake and snapshot request, allow the local request to finish,
-    /// then close stdin so the JSONL response is flushed. The app refreshes this snapshot every
-    /// minute; no OAuth token or private HTTP endpoint is accessed by CaliphBar.
+    deinit { shutdown() }
+
     func fetchRateLimitsOneShot() throws -> CodexRateLimits {
-        try write([
-            "id": 1,
-            "method": "initialize",
-            "params": ["clientInfo": ["name": "caliphbar", "title": "CaliphBar", "version": "0.2"]],
-        ])
-        try sendNotification(method: "initialized")
-        try write([
-            "id": 2,
-            "method": "account/rateLimits/read",
-            "params": NSNull(),
-        ])
-
-        Thread.sleep(forTimeInterval: 5.0)
-        try? stdinPipe.fileHandleForWriting.close()
-        let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-
-        for line in data.split(separator: 0x0A) {
-            guard let message = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
-                  Self.integer(message["id"]) == 2
-            else { continue }
-            if let error = message["error"] {
-                throw CodexAppServerError.rpcError(String(describing: error))
-            }
-            guard let limits = CodexAppServerRateLimitParser.parse(message: message) else {
-                throw CodexAppServerError.invalidPayload("missing rateLimits.primary.usedPercent")
-            }
-            return limits
+        let start = ProcessInfo.processInfo.systemUptime
+        let requests: [[String: Any]] = [
+            ["id": 1, "method": "initialize",
+             "params": ["clientInfo": ["name": "caliphbar", "title": "CaliphBar", "version": "0.2"]]],
+            ["method": "initialized"],
+            ["id": 2, "method": "account/rateLimits/read", "params": NSNull()],
+        ]
+        var request = Data()
+        for message in requests {
+            request.append(try JSONSerialization.data(withJSONObject: message))
+            request.append(0x0A)
         }
-
-        throw CodexAppServerError.invalidPayload("account/rateLimits/read did not return before the local snapshot closed")
-    }
-
-    func initialize() async throws {
-        _ = try await request(
-            method: "initialize",
-            params: ["clientInfo": ["name": "caliphbar", "title": "CaliphBar", "version": "0.2"]],
-            // Codex Desktop itself allows roughly 30 seconds for the app-server handshake.
-            // Real installations with substantial local state / MCP configuration can exceed
-            // the previous 8-second CaliphBar deadline even though the server is healthy.
-            timeout: 30.0
-        )
-        try sendNotification(method: "initialized")
-    }
-
-    func request(
-        method: String,
-        params: [String: Any]? = nil,
-        timeout: TimeInterval
-    ) async throws -> [String: Any] {
-        let id = reserveID()
-        var payload: [String: Any] = ["id": id, "method": method]
-        if let params { payload["params"] = params }
-        try write(payload)
-
-        return try await withThrowingTaskGroup(of: [String: Any].self) { group in
-            group.addTask { [self] in
-                while true {
-                    let line = try await readLine()
-                    guard let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
-                        continue
-                    }
-                    if let messageID = Self.integer(message["id"]), messageID == id {
-                        if let error = message["error"] {
-                            throw CodexAppServerError.rpcError(String(describing: error))
-                        }
-                        return message
-                    }
+        // This small, single write fits into the empty pipe; it cannot fill the pipe.
+        try input.fileHandleForWriting.write(contentsOf: request)
+        var pending = Data()
+        var received = 0
+        var inputClosed = false
+        var buffer = [UInt8](repeating: 0, count: 8192)
+        while ProcessInfo.processInfo.systemUptime - start < timeout {
+            // Some bundled CLI versions flush only after stdin closes.
+            if !inputClosed && ProcessInfo.processInfo.systemUptime - start >= flushAfter {
+                try? input.fileHandleForWriting.close()
+                inputClosed = true
+            }
+            // Bounded nonblocking reads keep both stderr floods and missing EOF from
+            // bypassing the overall deadline. No stderr/credentials are retained.
+            let count = read(output.fileHandleForReading.fileDescriptor, &buffer, buffer.count)
+            if count > 0 {
+                received += count
+                guard received <= 1_048_576 else {
+                    throw CodexAppServerError.invalidPayload("quota response exceeds 1 MiB")
                 }
-            }
-
-            group.addTask { [self] in
-                try await Task.sleep(for: .seconds(timeout))
-                shutdown()
-                throw CodexAppServerError.timeout(method)
-            }
-
-            guard let first = try await group.next() else {
+                pending.append(contentsOf: buffer.prefix(count))
+            } else if count < 0 && errno != EAGAIN && errno != EINTR {
                 throw CodexAppServerError.closed
             }
-            group.cancelAll()
-            return first
+            while let newline = pending.firstIndex(of: 0x0A) {
+                let line = Data(pending[..<newline])
+                pending.removeSubrange(...newline)
+                if let limits = try Self.parseResponse(line) { return limits }
+            }
+            if count == 0 {
+                if let limits = try Self.parseResponse(pending) { return limits }
+                throw CodexAppServerError.closed
+            }
+            _ = read(errors.fileHandleForReading.fileDescriptor, &buffer, buffer.count)
+            Thread.sleep(forTimeInterval: 0.01)
         }
+        throw CodexAppServerError.timeout("account/rateLimits/read")
+    }
+
+    private static func parseResponse(_ line: Data) throws -> CodexRateLimits? {
+        guard let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              String(describing: message["id"] ?? "") == "2" else { return nil }
+        if message["error"] != nil {
+            throw CodexAppServerError.rpcError("account/rateLimits/read failed")
+        }
+        guard let limits = CodexAppServerRateLimitParser.parse(message: message) else {
+            throw CodexAppServerError.invalidPayload("missing rateLimits.primary.usedPercent")
+        }
+        return limits
+    }
+
+    func cancel() {
+        CodexQuotaProbeLifecycle.lock.lock()
+        defer { CodexQuotaProbeLifecycle.lock.unlock() }
+        if pid > 0 { kill(-pid, SIGKILL) }
     }
 
     func shutdown() {
-        lock.lock()
-        if didShutdown {
-            lock.unlock()
-            return
-        }
-        didShutdown = true
-        lock.unlock()
-
-        try? stdinPipe.fileHandleForWriting.close()
-        if process.isRunning {
-            process.terminate()
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.35) { [process] in
-                if process.isRunning { process.interrupt() }
-            }
-        }
-        try? stdoutPipe.fileHandleForReading.close()
-        try? stderrPipe.fileHandleForReading.close()
-    }
-
-    private func sendNotification(method: String) throws {
-        try write(["method": method])
-    }
-
-    private func reserveID() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        let id = nextID
-        nextID += 1
-        return id
-    }
-
-    private func write(_ payload: [String: Any]) throws {
-        var data = try JSONSerialization.data(withJSONObject: payload)
-        data.append(0x0A)
-        do {
-            try stdinPipe.fileHandleForWriting.write(contentsOf: data)
-        } catch {
-            throw CodexAppServerError.closed
-        }
-    }
-
-    private func readLine() async throws -> Data {
-        try await Task.detached(priority: .utility) { [self] in
-            try readLineBlocking()
-        }.value
-    }
-
-    private func readLineBlocking() throws -> Data {
-        while true {
-            lock.lock()
-            if let newline = stdoutBuffer.firstIndex(of: 0x0A) {
-                let line = stdoutBuffer[..<newline]
-                stdoutBuffer.removeSubrange(...newline)
-                lock.unlock()
-                return Data(line)
-            }
-            lock.unlock()
-
-            let chunk: Data
-            do {
-                chunk = try stdoutPipe.fileHandleForReading.read(upToCount: 4096) ?? Data()
-            } catch {
-                throw CodexAppServerError.closed
-            }
-            guard !chunk.isEmpty else { throw CodexAppServerError.closed }
-
-            lock.lock()
-            stdoutBuffer.append(chunk)
-            lock.unlock()
-        }
-    }
-
-    private static func integer(_ value: Any?) -> Int? {
-        switch value {
-        case let value as Int: return value
-        case let value as NSNumber: return value.intValue
-        case let value as String: return Int(value)
-        default: return nil
-        }
+        CodexQuotaProbeLifecycle.lock.lock()
+        defer { CodexQuotaProbeLifecycle.lock.unlock() }
+        guard pid > 0 else { return }
+        // Keep the direct child unreaped until the final group signal, preventing PID
+        // reuse from targeting an unrelated group. Teardown also runs after success.
+        kill(-pid, SIGTERM)
+        Thread.sleep(forTimeInterval: 0.05)
+        kill(-pid, SIGKILL)
+        while waitpid(pid, nil, 0) < 0 && errno == EINTR {}
+        CodexQuotaProbeLifecycle.groups.remove(pid)
+        pid = 0
+        try? input.fileHandleForWriting.close()
+        try? output.fileHandleForReading.close()
+        try? errors.fileHandleForReading.close()
     }
 
     private static func resolveExecutable() -> String? {
         let environment = ProcessInfo.processInfo.environment
         let fm = FileManager.default
-
         if let override = environment["CODEX_CLI_PATH"], fm.isExecutableFile(atPath: override) {
             return override
         }
-
-        var candidates: [String] = []
-        if let path = environment["PATH"] {
-            candidates.append(contentsOf: path.split(separator: ":").map { String($0) + "/codex" })
-        }
+        var candidates = (environment["PATH"] ?? "").split(separator: ":").map { String($0) + "/codex" }
         if let home = environment["HOME"] {
-            candidates.append(contentsOf: [
-                "\(home)/.local/bin/codex",
-                "\(home)/.npm-global/bin/codex",
-                "\(home)/.bun/bin/codex",
-            ])
+            candidates += ["\(home)/.local/bin/codex", "\(home)/.npm-global/bin/codex", "\(home)/.bun/bin/codex"]
         }
-        candidates.append(contentsOf: [
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex",
-            "/usr/bin/codex",
-        ])
-
-        if let direct = candidates.first(where: { fm.isExecutableFile(atPath: $0) }) {
-            return direct
-        }
-
-        // GUI apps often inherit a minimal PATH. A login shell is a last-resort resolver only;
-        // it is never used to execute arbitrary user-provided command text.
-        let shell = environment["SHELL"] ?? "/bin/zsh"
-        let resolver = Process()
-        let output = Pipe()
-        resolver.executableURL = URL(fileURLWithPath: shell)
-        resolver.arguments = ["-lc", "command -v codex"]
-        resolver.standardOutput = output
-        resolver.standardError = Pipe()
-        do {
-            try resolver.run()
-            resolver.waitUntilExit()
-            guard resolver.terminationStatus == 0 else { return nil }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            let value = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if let value, fm.isExecutableFile(atPath: value) { return value }
-        } catch {
-            return nil
-        }
-        return nil
+        candidates += ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]
+        // Bundled CLI resolution is installed by CodexProvider. Never start an
+        // unbounded login shell merely to discover an executable.
+        return candidates.first(where: { fm.isExecutableFile(atPath: $0) })
     }
 
     private static func environmentForExecutable(_ executable: String) -> [String: String] {
@@ -440,7 +381,6 @@ private final class CodexRPCSession: @unchecked Sendable {
         return environment
     }
 }
-
 enum CodexAppServerError: LocalizedError {
     case executableNotFound
     case launchFailed(String)
