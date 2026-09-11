@@ -54,6 +54,10 @@ CaliphBar 是一款轻量的 macOS 菜单栏额度监控工具。项目应保持
 
 某些 macOS 上的 alpha CLI 会在 stdin 保持打开时缓冲 JSONL stdout。CaliphBar 因此执行有时限、只读的单次握手和快照请求，然后关闭 stdin 使官方响应刷出。该读取按普通刷新周期重复，不会阻塞 Claude 或 Antigravity 先行回填。
 
+仅设置 read-only/never 不会禁止 CLI 的插件初始化；额度探针另外传入进程级 `--disable plugins`，避免周期刷新触发 marketplace 克隆/升级。传输同时非阻塞读取 stdout/stderr，以单调时钟执行 30 秒总超时，stdout 限制为 1 MiB。响应可提前返回，仅为旧 CLI 保留第 5 秒关闭 stdin 的兼容行为。
+
+每次探针创建独立 POSIX 进程组。查询结束、错误、取消均终止组内子进程并回收直接子进程；正常退出 App 时禁止新探针启动并终止已登记的进程组。不会扫描或终止其他 Codex 实例。路径发现保留进程级覆盖、PATH、常见安装位置及现有桌面捆绑 CLI 发现，不再启动可能无限等待的登录 shell。
+
 `rateLimitsByLimitId` 中的模型特定窗口属于账户真实数据。例如 Codex Spark 限制应作为额外窗口显示，不得折叠进普通两条额度。映射5 小时/周额度时优先使用窗口时长元数据，不依赖传输槽位顺序。
 
 本地 `rollout-*.jsonl` 只是回退证据。已过重置时间的窗口会被丢弃，可用回退只能标记为 `STALE`。

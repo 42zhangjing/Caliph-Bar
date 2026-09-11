@@ -11,6 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pillWindow: FloatingPillWindow!
     private var cancellables: Set<AnyCancellable> = []
 
+    func applicationWillTerminate(_ notification: Notification) {
+        CodexQuotaProbeLifecycle.shutdown()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 

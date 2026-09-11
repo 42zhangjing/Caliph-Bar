@@ -14,6 +14,8 @@ jobs:
         run: swift --version
       - name: Test parsers and core
         run: swift test
+      - name: Test quota process lifecycle (offline)
+        run: python3 scripts/check-codex-probe.py
       - name: Build universal app
         run: ./build-app.sh
       - name: Verify bundle
