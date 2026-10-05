@@ -3,6 +3,15 @@ import Testing
 @testable import CaliphBarCore
 
 @Suite struct CodexRateLimitParserTests {
+    @Test func rolloutRetainsObservationAgeRatherThanReadTime() throws {
+        let json = #"{"timestamp":"2026-10-03T05:18:48.123Z","payload":{"rate_limits":{"primary":{"used_percent":21,"resets_at":1788100000}}}}"#
+        let parsed = CodexRateLimitParser.parse(lineData: Data(json.utf8))
+        #expect(parsed?.observedAt != nil)
+        #expect(parsed!.observedAt! < Date(timeIntervalSince1970: 1791100000))
+        let noTime = #"{"payload":{"rate_limits":{"primary":{"used_percent":21}}}}"#
+        #expect(CodexRateLimitParser.parse(lineData: Data(noTime.utf8))?.observedAt == nil)
+    }
+
     @Test func parsesPrimarySecondaryAndPlan() throws {
         let json = #"{"payload":{"rate_limits":{"primary":{"used_percent":21,"resets_at":1788100000},"secondary":{"used_percent":52.5,"resets_at":1788500000},"plan_type":"plus"}}}"#
         let parsed = CodexRateLimitParser.parse(lineData: Data(json.utf8))

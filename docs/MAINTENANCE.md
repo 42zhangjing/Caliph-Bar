@@ -81,6 +81,8 @@ git rev-parse HEAD
 
 优先检查 `app-server` 返回的 `rateLimits` 结构。只读取额度所需字段，不得输出对话内容。实时读取失败时，才检查本地 rollout 的未过期窗口。缺少真实数据时应显示不可用，不得估算。
 
+运行 `python3 scripts/check-codex-probe.py` 验证分块响应、stderr 背压、EOF、RPC 错误、无效/过大响应、超时、取消和 App 退出。脚本使用临时假 CLI，不读取凭据、不访问网络。真实验收需证明 LIVE 快照连续跨过至少一个 60 秒自动周期，不能只验证重启后的首次成功。
+
 ### Antigravity
 
 可以检查进程名、PID、loopback 监听端口、响应状态和清理过的 quota bucket 元数据。不得打印 CSRF token 或其他凭据。

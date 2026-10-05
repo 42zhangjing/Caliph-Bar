@@ -62,41 +62,23 @@ struct CodexRadarSnapshot: Codable, Equatable, Sendable {
     let fetchedAt: Date
     let announcement: CodexRadarAnnouncement?
 
+    var event: AIHotResetEvent? = nil
+    var monitorStatus: String? = nil
+
     func signal(now: Date = Date()) -> CodexRadarSignal {
-        // Active reset window or active unexpired announcement always takes precedence as a HOT signal
-        let isWindowActive = windowOpen == true && (closedAt == nil || (closedAt ?? .distantPast) > now)
-        let hasActiveAnnouncement = announcement?.closesAt.map { $0 > now } ?? false
-
-        if isWindowActive || hasActiveAnnouncement {
-            return .hot
+        // Verification age takes precedence, even for a previously active announcement.
+        guard let verified = sourceUpdatedAt,
+              now.timeIntervalSince(verified) <= 2 * 60 * 60,
+              now.timeIntervalSince(fetchedAt) <= 2 * 60 * 60 else { return .stale }
+        if monitorStatus == "delayed" || monitorStatus == "attention" || monitorStatus == "unknown" { return .stale }
+        guard let event, event.isDirectReset else { return .quiet }
+        switch event.displayStatus {
+        case "in_progress": return .hot
+        case "announced", "expired_unconfirmed", "likely_completed": return .watch
+        default: return .quiet
         }
-
-        let freshnessDate = sourceUpdatedAt ?? fetchedAt
-        if now.timeIntervalSince(freshnessDate) > 2 * 60 * 60 {
-            return .stale
-        }
-
-        let words = [status, predictionLevel, recommendedAction, summary]
-            .compactMap { $0?.lowercased() }
-            .joined(separator: " ")
-
-        if windowOpen == false,
-           ["closed", "wait", "quiet", "inactive"].contains(where: words.contains),
-           (probability24h ?? 0) < 0.35 {
-            return .quiet
-        }
-
-        if ["hot", "high", "strong", "open", "active"].contains(where: words.contains) {
-            return .hot
-        }
-        if let probability24h, probability24h >= 0.65 { return .hot }
-
-        if ["watch", "medium", "likely", "pending", "possible"].contains(where: words.contains) {
-            return .watch
-        }
-        if let probability24h, probability24h >= 0.35 { return .watch }
-        return .quiet
     }
+
 }
 
 struct CodexLocalResetConfirmation: Codable, Equatable, Sendable {
@@ -119,7 +101,7 @@ final class CodexRadarStore: ObservableObject {
     @Published private(set) var localConfirmation: CodexLocalResetConfirmation?
 
     private enum Keys {
-        static let cache = "caliphbar.codexRadar.cache.v1"
+        static let cache = "caliphbar.codexRadar.aihot.cache.v1"
         static let lastSignal = "caliphbar.codexRadar.lastSignal.v1"
         static let hasSeenSignal = "caliphbar.codexRadar.hasSeenSignal.v1"
         static let codexObservation = "caliphbar.codexRadar.codexObservation.v1"
@@ -135,6 +117,7 @@ final class CodexRadarStore: ObservableObject {
     }
 
     private let client = CodexRadarClient()
+    private var lastAttemptAt: Date?
     private var timer: Timer?
 
     private init() {
@@ -153,6 +136,9 @@ final class CodexRadarStore: ObservableObject {
 
     func refresh() {
         guard !isRefreshing else { return }
+        // Respect AIHOT's documented ten-minute polling interval, including UI refreshes.
+        if let lastAttemptAt, Date().timeIntervalSince(lastAttemptAt) < 10 * 60 { return }
+        lastAttemptAt = Date()
         isRefreshing = true
 
         Task {
@@ -172,7 +158,7 @@ final class CodexRadarStore: ObservableObject {
         }
     }
 
-    func refreshIfNeeded(olderThan: TimeInterval = 30) {
+    func refreshIfNeeded(olderThan: TimeInterval = 10 * 60) {
         guard !isRefreshing else { return }
         if let fetchedAt = snapshot?.fetchedAt, Date().timeIntervalSince(fetchedAt) < olderThan {
             return
@@ -182,11 +168,10 @@ final class CodexRadarStore: ObservableObject {
 
     private func rescheduleTimer() {
         timer?.invalidate()
-        let isHotOrActive = signal == .hot || snapshot?.windowOpen == true || snapshot?.announcement != nil
-        let interval: TimeInterval = isHotOrActive ? 60 : 5 * 60
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        timer = Timer(timeInterval: 10 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
     /// Correlates a public Radar event with a real local Codex quota discontinuity.
@@ -339,203 +324,50 @@ final class CodexRadarStore: ObservableObject {
     }
 }
 
-private struct CodexRadarClient: Sendable {
-    private let jsonURL = URL(string: "https://codexradar.com/current.json")!
-    private let homeURL = URL(string: "https://codexradar.com/")!
+private actor CodexRadarClient {
+    private let jsonURL = URL(string: "https://aihot.news/api/v1/codex-resets/recent")!
+    private var etag: String?
+    private var cachedFeed: AIHotResetFeed?
+    private var retryAfter: Date?
 
     func fetch() async throws -> CodexRadarSnapshot {
+        if let retryAfter, retryAfter > Date() { throw URLError(.resourceUnavailable) }
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 8
-        configuration.timeoutIntervalForResource = 10
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 20
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-
-        var request = URLRequest(url: jsonURL)
-        request.timeoutInterval = 8
-        request.cachePolicy = .reloadIgnoringLocalCacheData
+        var request = URLRequest(url: jsonURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("CaliphBar/0.2 personal-macOS-client", forHTTPHeaderField: "User-Agent")
-
+        request.setValue("aihot-api/2.0.0 CaliphBar", forHTTPHeaderField: "User-Agent")
+        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if http.statusCode == 429 || http.statusCode == 503 {
+            let delay = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 600
+            retryAfter = Date().addingTimeInterval(max(600, delay))
         }
-
-        var announcement: CodexRadarAnnouncement?
-        do {
-            var homeRequest = URLRequest(url: homeURL)
-            homeRequest.timeoutInterval = 5
-            homeRequest.cachePolicy = .reloadIgnoringLocalCacheData
-            homeRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-            homeRequest.setValue("CaliphBar/0.2 personal-macOS-client", forHTTPHeaderField: "User-Agent")
-
-            let (homeData, homeResponse) = try await session.data(for: homeRequest)
-            if let homeHTTP = homeResponse as? HTTPURLResponse, (200..<300).contains(homeHTTP.statusCode),
-               let html = String(data: homeData, encoding: .utf8) {
-                announcement = CodexRadarParser.parseAnnouncement(html: html)
-            }
-        } catch {
-            // HTML announcement fetching is auxiliary; failure does not affect the primary snapshot
+        let feed: AIHotResetFeed
+        if http.statusCode == 304, let cachedFeed {
+            feed = cachedFeed
+        } else {
+            guard http.statusCode == 200, data.count <= 2_097_152 else { throw URLError(.badServerResponse) }
+            feed = try AIHotResetFeed.parse(data)
+            cachedFeed = feed
+            etag = http.value(forHTTPHeaderField: "ETag")
         }
-
-        return try CodexRadarParser.parse(data, announcement: announcement)
-    }
-}
-
-private enum CodexRadarParser {
-    static func parseAnnouncement(html: String) -> CodexRadarAnnouncement? {
-        guard html.contains("site-announcement") else { return nil }
-
-        func extract(pattern: String) -> String? {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
-                return nil
-            }
-            let nsString = html as NSString
-            let range = NSRange(location: 0, length: nsString.length)
-            guard let match = regex.firstMatch(in: html, options: [], range: range),
-                  match.numberOfRanges > 1 else { return nil }
-            let matchRange = match.range(at: 1)
-            guard matchRange.location != NSNotFound else { return nil }
-            let extracted = nsString.substring(with: matchRange)
-                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return extracted.isEmpty ? nil : extracted
-        }
-
-        let headline = extract(pattern: "class=[\"']site-announcement-headline[\"'][^>]*>(.*?)</strong>")
-            ?? extract(pattern: "class=[\"']site-announcement-headline[\"'][^>]*>(.*?)</")
-        guard let headline else { return nil }
-
-        let lead = extract(pattern: "class=[\"']site-announcement-lead[\"'][^>]*>(.*?)</span>")
-            ?? extract(pattern: "class=[\"']site-announcement-lead[\"'][^>]*>(.*?)</")
-        let detail = extract(pattern: "class=[\"']site-announcement-reset-detail[\"'][^>]*>(.*?)</p>")
-            ?? extract(pattern: "class=[\"']site-announcement-reset-detail[\"'][^>]*>(.*?)</")
-        let closesAtRaw = extract(pattern: "data-window-closes-at=[\"']([^\"']+)[\"']")
-        let closesAt = closesAtRaw.flatMap { date($0) }
-        let expiredText = extract(pattern: "data-expired-text=[\"']([^\"']+)[\"']")
-        let sourceURL = extract(pattern: "class=[\"'][^\"']*site-announcement-source[^\"']*[\"']\\s+href=[\"']([^\"']+)[\"']")
-            .flatMap { URL(string: $0) }
-
-        return CodexRadarAnnouncement(
-            headline: headline,
-            lead: lead,
-            detail: detail,
-            closesAt: closesAt,
-            expiredText: expiredText,
-            sourceURL: sourceURL
+        // A 304 updates fetch time, never the source verification watermark.
+        let event = feed.selectedEvent
+        var result = CodexRadarSnapshot(
+            windowOpen: event?.isDirectReset == true && event?.status == "announced",
+            status: event?.displayStatus, recommendedAction: nil, message: nil,
+            windowTitle: nil, windowScope: nil, openedAt: nil, predictionLevel: nil,
+            probability24h: nil, probability48h: nil, summary: nil, closedAt: nil,
+            sourceURL: URL(string: "https://aihot.news/codex-reset"),
+            sourceUpdatedAt: feed.verifiedAt, fetchedAt: Date(), announcement: nil
         )
-    }
-
-    static func parse(
-        _ data: Data,
-        announcement: CodexRadarAnnouncement? = nil,
-        fetchedAt: Date = Date()
-    ) throws -> CodexRadarSnapshot {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw URLError(.cannotParseResponse)
-        }
-
-        let window = dictionary(root["window"])
-        let prediction = dictionary(root["prediction"])
-
-        let windowOpen = bool(window?["open"] ?? root["window_open"] ?? root["windowOpen"])
-        let status = string(window?["status"] ?? root["status"])
-        let action = string(window?["action"] ?? root["recommended_action"] ?? root["recommendedAction"])
-        let message = string(window?["message"] ?? root["message"])
-        let windowTitle = string(window?["title"])
-        let windowScope = string(window?["scope"])
-        let openedAt = date(window?["opened_at"])
-        let predictionLevel = string(prediction?["level"] ?? root["prediction_level"])
-        let probability24h = probability(prediction?["probability_24h"] ?? prediction?["probability24h"] ?? root["probability_24h"])
-        let probability48h = probability(prediction?["probability_48h"] ?? prediction?["probability48h"] ?? root["probability_48h"])
-        let summary = string(prediction?["summary"] ?? root["summary"])
-        let closedAt = date(window?["closed_at"] ?? root["closed_at"])
-        let sourceURL = string(window?["source_url"] ?? window?["sourceURL"] ?? root["source_url"])
-            .flatMap(URL.init(string:))
-
-        let updated = [
-            date(prediction?["updated_at"]),
-            date(root["monitored_at"]),
-            date(root["updated_at"]),
-            openedAt,
-            closedAt,
-            announcement?.closesAt,
-        ].compactMap { $0 }.max()
-
-        guard windowOpen != nil || status != nil || predictionLevel != nil || probability24h != nil || summary != nil || announcement != nil else {
-            throw URLError(.cannotParseResponse)
-        }
-
-        return CodexRadarSnapshot(
-            windowOpen: windowOpen,
-            status: status,
-            recommendedAction: action,
-            message: message,
-            windowTitle: windowTitle,
-            windowScope: windowScope,
-            openedAt: openedAt,
-            predictionLevel: predictionLevel,
-            probability24h: probability24h,
-            probability48h: probability48h,
-            summary: summary,
-            closedAt: closedAt,
-            sourceURL: sourceURL,  // announcement.sourceURL is attribution only, not the primary link
-            sourceUpdatedAt: updated,
-            fetchedAt: fetchedAt,
-            announcement: announcement
-        )
-    }
-
-    private static func dictionary(_ value: Any?) -> [String: Any]? { value as? [String: Any] }
-
-    private static func string(_ value: Any?) -> String? {
-        guard let value = value as? String else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func bool(_ value: Any?) -> Bool? {
-        switch value {
-        case let value as Bool: return value
-        case let value as NSNumber: return value.boolValue
-        case let value as String:
-            switch value.lowercased() {
-            case "true", "1", "yes", "open", "active": return true
-            case "false", "0", "no", "closed", "inactive": return false
-            default: return nil
-            }
-        default: return nil
-        }
-    }
-
-    private static func probability(_ value: Any?) -> Double? {
-        let raw: Double?
-        switch value {
-        case let value as Double: raw = value
-        case let value as Int: raw = Double(value)
-        case let value as NSNumber: raw = value.doubleValue
-        case let value as String: raw = Double(value.replacingOccurrences(of: "%", with: ""))
-        default: raw = nil
-        }
-        guard var raw else { return nil }
-        if raw > 1 { raw /= 100 }
-        return min(1, max(0, raw))
-    }
-
-    private static func date(_ value: Any?) -> Date? {
-        if let number = value as? NSNumber {
-            let raw = number.doubleValue
-            return Date(timeIntervalSince1970: raw > 1_000_000_000_000 ? raw / 1000 : raw)
-        }
-        guard let raw = value as? String else { return nil }
-        if let epoch = Double(raw) {
-            return Date(timeIntervalSince1970: epoch > 1_000_000_000_000 ? epoch / 1000 : epoch)
-        }
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: raw) { return date }
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        return standard.date(from: raw)
+        result.event = event
+        result.monitorStatus = feed.monitor?.status
+        return result
     }
 }

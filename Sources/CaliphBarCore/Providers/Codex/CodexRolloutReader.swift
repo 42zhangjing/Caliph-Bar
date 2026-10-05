@@ -40,6 +40,7 @@ public struct CodexRateLimits: Equatable, Sendable {
     public let secondaryWindowMinutes: Double?
     public let planType: String?
     public let extraRateLimits: [CodexExtraRateLimit]
+    public let observedAt: Date?
 
     public init(
         primaryPercent: Double,
@@ -49,7 +50,8 @@ public struct CodexRateLimits: Equatable, Sendable {
         secondaryResetsAt: Date?,
         secondaryWindowMinutes: Double? = nil,
         planType: String?,
-        extraRateLimits: [CodexExtraRateLimit] = []
+        extraRateLimits: [CodexExtraRateLimit] = [],
+        observedAt: Date? = nil
     ) {
         self.primaryPercent = primaryPercent
         self.primaryResetsAt = primaryResetsAt
@@ -59,6 +61,7 @@ public struct CodexRateLimits: Equatable, Sendable {
         self.secondaryWindowMinutes = secondaryWindowMinutes
         self.planType = planType
         self.extraRateLimits = extraRateLimits
+        self.observedAt = observedAt
     }
 }
 
@@ -79,8 +82,18 @@ public enum CodexRateLimitParser {
             secondaryPercent: number(secondary?["used_percent"]),
             secondaryResetsAt: date(secondary?["resets_at"]),
             secondaryWindowMinutes: number(secondary?["window_duration_mins"] ?? secondary?["window_minutes"]),
-            planType: rateLimits["plan_type"] as? String
+            planType: rateLimits["plan_type"] as? String,
+            observedAt: observationDate(object["timestamp"])
         )
+    }
+
+    private static func observationDate(_ value: Any?) -> Date? {
+        guard let raw = value as? String else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: raw) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
     }
 
     private static func number(_ value: Any?) -> Double? {

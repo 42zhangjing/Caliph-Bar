@@ -77,5 +77,6 @@ lipo -info "$APP/Contents/MacOS/$APP_NAME"
 
 echo "Built $APP"
 
-# Prevent Spotlight from indexing the build-directory .app as a separate launcher
-touch "$APP/.metadata_never_index"
+# Prevent Spotlight from indexing the development directory. Bundle-root files
+# added after signing invalidate strict signature verification.
+touch .metadata_never_index

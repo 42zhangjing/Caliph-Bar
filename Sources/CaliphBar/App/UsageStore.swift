@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 import CaliphBarCore
 
 @MainActor
@@ -83,6 +84,7 @@ final class UsageStore: ObservableObject {
     private let cache = SnapshotCache()
     private var liveCache: [ProviderID: ProviderSnapshot]
     private var timer: Timer?
+    private var wakeObserver: NSObjectProtocol?
 
     init() {
         let defaults = UserDefaults.standard
@@ -103,38 +105,41 @@ final class UsageStore: ObservableObject {
 
         if notificationsEnabled { UsageNotifier.requestAuthorizationIfNeeded() }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
     }
 
-    deinit { timer?.invalidate() }
+    deinit {
+        timer?.invalidate()
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+    }
 
     func item(for provider: ProviderID) -> ProviderSnapshot? {
         items.first { $0.provider == provider }
     }
 
     func refresh() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        refreshingProviders = Set(ProviderID.allCases)
         let context = ProviderFetchContext(
             claudeSessionBudget: claudeSessionBudget,
             claudeWeeklyBudget: claudeWeeklyBudget
         )
-        let providers = self.providers
-
-        Task {
-            await withTaskGroup(of: ProviderFetchResult.self) { group in
-                for provider in providers {
-                    group.addTask { await provider.fetch(context: context) }
-                }
-                for await result in group {
-                    publish(result: result)
-                }
+        // A slow provider must never suppress the next refresh of another provider.
+        for provider in providers where !refreshingProviders.contains(provider.id) {
+            refreshingProviders.insert(provider.id)
+            Task {
+                let result = await provider.fetch(context: context)
+                publish(result: result)
+                isRefreshing = !refreshingProviders.isEmpty
             }
-            isRefreshing = false
         }
+        isRefreshing = !refreshingProviders.isEmpty
     }
 
     func centerPill() {
@@ -165,7 +170,11 @@ final class UsageStore: ObservableObject {
             cache.save(liveCache)
         } else if let cached = liveCache[result.provider],
                   let stale = cache.staleSnapshot(from: cached, error: result.errorDescription) {
-            resolved = stale
+            if let fallback = result.fallbackSnapshot, fallback.capturedAt > stale.capturedAt {
+                resolved = fallback
+            } else {
+                resolved = stale
+            }
         } else if let fallback = result.fallbackSnapshot {
             resolved = fallback
         } else {

@@ -320,7 +320,12 @@ private struct CodexMiniRadarInlineBlock: View {
                 }
             }
 
-            if let ann = radar.snapshot?.announcement {
+            if let event = radar.snapshot?.event {
+                Text(event.headline(isChinese: l10n.isChinese))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+            } else if let ann = radar.snapshot?.announcement {
                 Text("\(ann.headline)：\(ann.lead ?? ann.detail ?? "")")
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.65))
@@ -460,7 +465,22 @@ struct SideRadarPanelView: View {
                     .foregroundStyle(.white.opacity(0.40))
 
                 HStack(spacing: 10) {
-                    if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
+                    if let event = radar.snapshot?.event {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(event.headline(isChinese: l10n.isChinese))
+                                .font(.system(size: 11, weight: .semibold))
+                            if let target = event.target {
+                                Text((l10n.isChinese ? "AIHOT 预计：" : "AIHOT estimate: ") + target.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 10))
+                            }
+                            Text(event.presentation?.scopeLabel ?? (l10n.isChinese ? "适用范围未说明" : "Scope unspecified"))
+                                .font(.system(size: 10))
+                        }
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(Color.white.opacity(0.04)))
+                    } else if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
                         countdownCell(target: closesAt)
                         targetTimeCell(target: closesAt)
                     } else if let announcement = radar.snapshot?.announcement, radar.snapshot?.windowOpen == true {
@@ -475,8 +495,9 @@ struct SideRadarPanelView: View {
                         activeWindowCell
                         scopeCell
                     } else {
-                        probabilityCell("24H", value: radar.snapshot?.probability24h)
-                        probabilityCell("48H", value: radar.snapshot?.probability48h)
+                        Text(l10n.isChinese ? "暂无待生效重置" : "No pending reset")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.68))
                     }
                 }
 
@@ -504,7 +525,7 @@ struct SideRadarPanelView: View {
 
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
-                    Text(l10n.isChinese ? "数据来自 Codex 雷达 · 不影响账户额度" : "Codex Radar · separate from account quota")
+                    Text(l10n.isChinese ? "数据来源：AIHOT · 不影响账户额度" : "AIHOT · separate from account quota")
                         .font(.system(size: 9))
                         .foregroundStyle(.white.opacity(0.32))
                     Spacer(minLength: 4)
@@ -751,6 +772,7 @@ struct SideRadarPanelView: View {
     }
 
     private var headlineText: String? {
+        if radar.snapshot?.event != nil { return nil }
         if let announcement = radar.snapshot?.announcement {
             if let lead = announcement.lead, !lead.isEmpty {
                 return "\(announcement.headline) · \(lead)"
@@ -764,6 +786,12 @@ struct SideRadarPanelView: View {
     }
 
     private var detailText: String {
+        if radar.signal == .stale || radar.signal == .offline {
+            return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+        }
+        if let event = radar.snapshot?.event {
+            return event.headline(isChinese: l10n.isChinese) + " · " + event.detail(isChinese: l10n.isChinese)
+        }
         if let announcement = radar.snapshot?.announcement, let detail = announcement.detail, !detail.isEmpty {
             return detail
         }
@@ -793,8 +821,8 @@ struct SideRadarPanelView: View {
     }
 
     private var sourceURL: URL {
-        // "查看完整" always opens the Codex Radar homepage, not a third-party source post
-        URL(string: "https://codexradar.com/")!
+        // Open the attributed public event calendar.
+        URL(string: "https://aihot.news/codex-reset")!
     }
 }
 

@@ -232,7 +232,7 @@ public struct CodexProvider: UsageProvider {
         now: Date = Date()
     ) -> ProviderSnapshot? {
         let windows = normalizedWindows(from: limits, now: now, discardExpired: true)
-        guard !windows.isEmpty else { return nil }
+        guard !windows.isEmpty, let observedAt = limits.observedAt else { return nil }
 
         return ProviderSnapshot(
             provider: .codex,
@@ -240,6 +240,7 @@ public struct CodexProvider: UsageProvider {
             sourceDetail: "Codex rollout fallback",
             planLabel: limits.planType,
             windows: windows,
+            capturedAt: observedAt,
             note: "Live Codex RPC unavailable; showing only unexpired local rollout data. \(rpcError)"
         )
     }
