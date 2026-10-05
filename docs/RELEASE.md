@@ -15,7 +15,7 @@ lipo -info CaliphBar.app/Contents/MacOS/CaliphBar
 codesign --verify --deep --strict CaliphBar.app
 ```
 
-预期架构为 `arm64` 和 `x86_64`。
+预期架构为 `arm64` 和 `x86_64`。开发目录的 `.metadata_never_index` 位于仓库根目录，不写入签名 App 根目录；打包或安装后再次验证签名，避免签名后添加文件导致 unsealed contents。
 
 UI 改动还需执行 `design-qa.md` 中的本机验收。CI 通过只能证明可编译、测试通过、架构正确和签名结构有效，不能代替视觉与交互验收。
 

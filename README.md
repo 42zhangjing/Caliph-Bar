@@ -27,7 +27,7 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 - **Claude Code**  可用 Claude Code 凭据存在时，从 Anthropic OAuth usage 接口读取准确账户用量。后台 Keychain 读取不会弹出系统授权框。实时数据暂时不可用时，优先保留最近一次有效值，之后才使用本机 JSONL 日志估算，并明确标记为 `ESTIMATED`。
 - **Codex**  优先通过本机 Codex `app-server` 的 `account/rateLimits/read` 读取当前额度。本地 rollout JSONL 只是回退数据，过期窗口不会显示为 `LIVE`。CaliphBar 不估算 Codex 额度，也不直接调用 ChatGPT 私有后端。
 - **Antigravity**  从正在运行的 Antigravity 2.x 本机 `language_server` 读取真实 quota summary。也支持已登录且已运行的 `agy` 进程作为本机回退。应用不抓取 Antigravity UI，不调用 Google 远程 OAuth 额度接口。
-- **Reset Radar**  独立读取 Codex Radar 公共结构化摘要，显示额外重置信号和 24/48 小时概率。它属于公共情报，不会改动或冒充用户的真实 Codex 额度。
+- **Reset Radar**  独立读取 AIHOT 的 Codex 重置事件，区分已宣布、进行中、已确认及未确认的预计窗口；重置卡与额度重置分开。它属于公共情报，不会改动或冒充用户的真实 Codex 额度。
 
 ### 界面与交互
 
@@ -49,7 +49,7 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 - 额度低于设定阈值时，每个窗口只通知一次。
 - Radar 只在信号明显升级时通知，避免重复打扰。
 - 支持开机启动。
-- 账户数据每 60 秒自动刷新，Radar 每 5 分钟独立刷新。
+- 账户数据每 60 秒自动刷新，Radar 按来源协议每 10 分钟独立刷新。
 - 保存最近一次可用的真实账户快照。
 - 生成同时包含 `arm64` 与 `x86_64` 的 Universal Binary。
 
@@ -59,7 +59,7 @@ xattr -dr com.apple.quarantine /Applications/CaliphBar.app
 - `STALE`  实时读取失败后显示的较旧本机数据。
 - `ESTIMATED`  基于本地记录得出的估算值，不是账户的精确额度。
 - `OFFLINE`  暂时没有可用数据。
-- Radar 的“数据超 2 小时未更新”  表示 24/48 小时概率来自旧缓存，不表示重置机会已经错过。
+- Radar 的“数据超 2 小时未更新”  表示 AIHOT 核验延迟或公共数据超过两小时未更新，不表示重置机会已经错过。
 
 ## 本地开发与安装
 
@@ -109,13 +109,13 @@ CaliphBar 只连接字面地址 `127.0.0.1` 或 `localhost` 的 Antigravity 本�
 
 ### Reset Radar
 
-当前版本每 5 分钟读取
+当前版本每 10 分钟通过 ETag 条件请求读取
 
 ```text
-https://codexradar.com/current.json
+https://aihot.news/api/v1/codex-resets/recent
 ```
 
-请求中不包含 Codex 凭据、本地额度或对话内容。Radar 缓存与账户额度快照完全分离。界面中的概率使用中性样式，只有“值得关注”和“强信号”状态会引入黄/红紧迫色。
+请求中不包含 Codex 凭据、本地额度或对话内容。Radar 缓存与账户额度快照完全分离。界面中的概率使用中性样式，只有已宣布和进行中的直接重置事件会引入提示色；不预测下一次重置。来源页面为 [AIHOT 重置监控](https://aihot.news/codex-reset)。个人非商业使用按 [AIHOT 使用规则](https://aihot.news/terms)；对外商业集成或批量再分发需要另行取得书面授权。
 
 ## 产品架构
 

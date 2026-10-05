@@ -23,11 +23,11 @@ enum CodexRadarPresentation {
         case .watch:
             return isChinese ? (compact ? "关注" : "值得关注") : "WATCH"
         case .quiet:
-            return isChinese ? (compact ? "暂无信号" : "暂无重置信号") : (compact ? "NO SIGNAL" : "NO RESET SIGNAL")
+            return isChinese ? (compact ? "暂无待生效" : "暂无待生效重置") : (compact ? "NO PENDING" : "NO PENDING RESET")
         case .stale:
             return isChinese
-                ? (compact ? "超2小时未更新" : "数据超2小时未更新")
-                : (compact ? ">2H OLD" : "DATA >2H OLD")
+                ? (compact ? "核验延迟/旧数据" : "核验延迟或数据陈旧")
+                : (compact ? "DELAYED/OLD" : "VERIFICATION DELAYED / OLD DATA")
         case .offline:
             return isChinese ? (compact ? "离线" : "情报离线") : "OFFLINE"
         }
@@ -41,16 +41,16 @@ enum CodexRadarPresentation {
                 : "A strong extra-reset signal was detected; compare it with your local quota."
         case .watch:
             return isChinese
-                ? "额外重置信号正在升温，建议继续观察。"
-                : "The extra-reset signal is rising; keep watching for confirmation."
+                ? "已宣布额度重置，等待确认生效。"
+                : "A quota reset was announced; awaiting confirmation."
         case .quiet:
             return isChinese
-                ? "当前没有明确的额外重置信号。"
-                : "There is no clear extra-reset signal right now."
+                ? "当前没有等待生效的额度重置。"
+                : "There is no pending quota reset right now."
         case .stale:
             return isChinese
-                ? "以上概率数据超过 2 小时未更新，正在等待 Radar 刷新。"
-                : "The probabilities above are over two hours old and awaiting a Radar refresh."
+                ? "AIHOT 核验延迟或数据超过 2 小时未更新。"
+                : "AIHOT verification is delayed or the data is over two hours old."
         case .offline:
             return isChinese
                 ? "暂时无法读取公共重置情报。"
@@ -98,7 +98,7 @@ struct CodexRadarDetailStrip: View {
     @ObservedObject private var l10n = L10n.shared
 
     private var sourceURL: URL {
-        URL(string: "https://codexradar.com/")!
+        URL(string: "https://aihot.news/codex-reset")!
     }
 
     var body: some View {
@@ -115,7 +115,7 @@ struct CodexRadarDetailStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text("RESET RADAR")
+                        Text("RESET RADAR · AIHOT")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                             .foregroundStyle(.white.opacity(0.82))
 
@@ -141,6 +141,14 @@ struct CodexRadarDetailStrip: View {
                             .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.52))
                     }
+                } else if let target = radar.snapshot?.event?.target, radar.signal == .watch || radar.signal == .hot {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(l10n.isChinese ? "AIHOT 预计" : "AIHOT EST.")
+                            .font(.system(size: 8, weight: .bold))
+                        Text(target.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 9, weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(0.64))
                 } else if let closesAt = radar.snapshot?.announcement?.closesAt, closesAt > Date() {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text(l10n.isChinese ? "预计" : "TARGET")
@@ -188,7 +196,7 @@ struct CodexRadarDetailStrip: View {
             )
         }
         .buttonStyle(.plain)
-        .help(l10n.isChinese ? "公共情报，与账户真实额度分离。数据来自 Codex 雷达。" : "Public intelligence, separate from account truth. Data from Codex Radar.")
+        .help(l10n.isChinese ? "公共情报，与账户真实额度分离。数据来源：AIHOT。" : "Public intelligence, separate from account truth. Data from AIHOT.")
     }
 
     private var freshConfirmation: CodexLocalResetConfirmation? {
@@ -210,6 +218,12 @@ struct CodexRadarDetailStrip: View {
     }
 
     private var detailText: String {
+        if radar.signal == .stale || radar.signal == .offline {
+            return CodexRadarPresentation.conciseDetail(for: radar.signal, isChinese: l10n.isChinese)
+        }
+        if let event = radar.snapshot?.event {
+            return event.headline(isChinese: l10n.isChinese) + " · " + event.detail(isChinese: l10n.isChinese)
+        }
         if let announcement = radar.snapshot?.announcement {
             if let lead = announcement.lead, !lead.isEmpty {
                 return "\(announcement.headline) (\(lead))"

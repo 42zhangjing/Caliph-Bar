@@ -115,6 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusItem()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        CodexQuotaProbeLifecycle.shutdown()
+    }
+
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
         let item = store.item(for: selection.selected)

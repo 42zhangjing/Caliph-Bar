@@ -111,3 +111,9 @@ UserDefaults 只保存轻量 UI 偏好和当前选择。最近一次有效的账
 ## 扩展 CaliphBar
 
 新增账户 Provider 时，实现 `UsageProvider` 并隔离 Provider 特定代码。新增公共情报源时，不得把它伪装成账户 Provider。应在情报层增加独立模型、缓存和通知，然后组合到合适的 UI。
+
+## 2026-10 刷新可靠性与 AIHOT
+
+账户 Provider 分别管理在途查询，任何单个 Provider 卡住不会阻止其他 Provider 的下一轮刷新。60 秒计时器加入 common run-loop mode，唤醒后立即刷新。Codex 探针采用非阻塞 stdout/stderr 读取、30 秒总截止时间和 1 MiB 输出上限；响应到达即返回。仅本次进程关闭插件初始化，进程组在成功、失败、取消、App 退出时回收。历史回退比较观测时间，优先显示较新的真实观测，仍标记 STALE。
+
+Radar 使用 AIHOT 的 recent JSON schema 1，每 10 分钟 ETag 轮询。304 不改变来源核验时间；来源核验延迟或来源/本地缓存超过两小时优先标陈旧。全量替换 recent 快照以接收撤回和更正，旧 Codex Radar 缓存不迁移。不使用概率、文本关键词或本地推算确认公共事件；个人账户额度始终独立。

@@ -314,7 +314,7 @@ private struct SilhouetteRadarNode: View {
     }
 
     private var probabilityLabel: String {
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
                 return "✓"
             }
@@ -325,7 +325,7 @@ private struct SilhouetteRadarNode: View {
     }
 
     private var probabilityColor: Color {
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
                 return Color(red: 0.25, green: 0.86, blue: 0.66)
             }
@@ -340,7 +340,7 @@ private struct SilhouetteRadarNode: View {
             isChinese: l10n.isChinese
         )
         // probabilityLabel returns literal "HOT" when active — avoid "24H HOT" which is nonsense
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             return state
         }
         guard let probability = radar.snapshot?.probability24h else { return state }
@@ -397,7 +397,7 @@ private struct RadarPillButton: View {
     }
 
     private var probabilityLabel: String {
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
                 return "✓"
             }
@@ -408,7 +408,7 @@ private struct RadarPillButton: View {
     }
 
     private var probabilityColor: Color {
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             if let ann = radar.snapshot?.announcement, isRadarCompletionAnnouncement(ann) {
                 return Color(red: 0.25, green: 0.86, blue: 0.66)
             }
@@ -423,7 +423,7 @@ private struct RadarPillButton: View {
             isChinese: l10n.isChinese
         )
         // probabilityLabel returns literal "HOT" when active — avoid "24H HOT" which is nonsense
-        if radar.snapshot?.windowOpen == true || radar.signal == .hot {
+        if radar.signal == .hot {
             return state
         }
         guard let probability = radar.snapshot?.probability24h else { return state }
