@@ -54,9 +54,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key>
   <string>$APP_NAME</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.10</string>
+  <string>0.2.11</string>
   <key>CFBundleVersion</key>
-  <string>12</string>
+  <string>13</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>
