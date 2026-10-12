@@ -170,11 +170,9 @@ final class UsageStore: ObservableObject {
             cache.save(liveCache)
         } else if let cached = liveCache[result.provider],
                   let stale = cache.staleSnapshot(from: cached, error: result.errorDescription) {
-            if let fallback = result.fallbackSnapshot, fallback.capturedAt > stale.capturedAt {
-                resolved = fallback
-            } else {
-                resolved = stale
-            }
+            // A recent real reading outranks any estimate: an estimate is always
+            // captured "now", so a timestamp comparison would let it win every time.
+            resolved = stale
         } else if let fallback = result.fallbackSnapshot {
             resolved = fallback
         } else {
