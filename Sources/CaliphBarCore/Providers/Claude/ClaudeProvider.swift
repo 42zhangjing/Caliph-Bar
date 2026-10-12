@@ -10,6 +10,7 @@ public struct ClaudeProvider: UsageProvider {
 
     public func fetch(context: ProviderFetchContext) async -> ProviderFetchResult {
         var failure: String?
+        var signedOut = false
 
         switch credentials.load(interactive: false) {
         case let .success(creds):
@@ -21,6 +22,21 @@ public struct ClaudeProvider: UsageProvider {
             }
         case let .failure(error):
             failure = error.errorDescription
+            switch error {
+            case .notFound, .missingOAuthPayload: signedOut = true
+            default: break
+            }
+        }
+
+        // Without Claude Code credentials the budget-based estimate is not
+        // anchored to any real quota, so show "not signed in" instead of a
+        // plausible-looking percentage.
+        if signedOut {
+            return ProviderFetchResult(
+                provider: .claude,
+                liveSnapshot: nil,
+                errorDescription: failure ?? "Claude credentials were not found."
+            )
         }
 
         let estimate = estimator.estimate(

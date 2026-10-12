@@ -46,7 +46,7 @@ CaliphBar 是一款轻量的 macOS 菜单栏额度监控工具。项目应保持
 
 ### Claude
 
-优先从 Anthropic 读取真实 usage。后台 Keychain 读取保持非交互式。实时读取失败时，近期有效快照可标记为 `STALE`；只有符合回退条件时才可使用本地日志估算，并标记为 `ESTIMATED`。
+优先从 Anthropic 读取真实 usage。后台 Keychain 读取保持非交互式。实时读取失败时，近期有效快照可标记为 `STALE`；STALE 快照始终优先于估算。未检测到 Claude Code 凭据（Keychain 与 `~/.claude/.credentials.json` 均无）时不做估算，直接显示“未登录/数据源不可用”，因为估算依赖用户自填预算，无凭据时没有任何真实额度可锚定。其他失败（网络、授权待确认等）才可使用本地日志估算，并标记为 `ESTIMATED`。仅使用 Claude 桌面 App 的用户没有 Claude Code 凭据，因此没有可读的实时数据源。
 
 ### Codex
 
